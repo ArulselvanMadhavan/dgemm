@@ -1,0 +1,10 @@
+[package]
+name = "dgemm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dam = { git = "https://github.com/stanford-ppl/DAM-RS.git", branch = "master" }
+itertools = "0.14.0"
+ndarray = "0.16.1"
+
