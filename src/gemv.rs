@@ -1,4 +1,4 @@
-use dam::{channel::adapters::RecvAdapter, context_tools::*};
+use dam::context_tools::*;
 use ndarray::prelude::*;
 #[context_macro]
 pub struct GEMV<T: Clone> {
