@@ -1,8 +1,9 @@
 use dam::{
     simulation::{InitializationOptionsBuilder, ProgramBuilder, RunOptions},
-    utility_contexts::{GeneratorContext, PrinterContext},
+    utility_contexts::*,
 };
-use dgemm::gemm::Linear;
+use dgemm::gemm::Gemm;
+use dgemm::producer::Producer;
 
 #[test]
 fn xpu_linear_test() {
@@ -34,8 +35,12 @@ fn xpu_linear_test() {
         .unwrap()
         .to_owned();
     ref_out = ref_out + &bias_mat;
-    ctx.add_child(GeneratorContext::new(|| x_mat.into_iter(), x_send));
-    ctx.add_child(Linear::new(
+    ctx.add_child(Producer::new(
+        || x_mat.into_iter(),
+        IN_FEATURES as u64,
+        x_send,
+    ));
+    ctx.add_child(Gemm::new(
         weight_mat,
         biases,
         x_recv,

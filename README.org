@@ -1,0 +1,6 @@
+* Pending Tasks
+- [ ] ConsumerContext
+- [ ] VerifyContext - Approx verify - Maybe?
+- [ ] Emit trace events
+- [ ] Decide a dataflow
+- [ ] feed into raylib or perfetto
