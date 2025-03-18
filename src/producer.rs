@@ -7,7 +7,6 @@ where
     FType: FnOnce() -> IType + Send + Sync,
 {
     iterator: Option<FType>,
-    capacity: u64,
     output: Sender<T>,
 }
 
@@ -16,10 +15,9 @@ where
     IType: Iterator<Item = T>,
     FType: FnOnce() -> IType + Send + Sync,
 {
-    pub fn new(iterator: FType, capacity: u64, output: Sender<T>) -> Self {
+    pub fn new(iterator: FType, output: Sender<T>) -> Self {
         let result = Self {
             iterator: Some(iterator),
-            capacity,
             output,
             context_info: Default::default(),
         };
@@ -36,17 +34,18 @@ where
 {
     fn run(&mut self) {
         if let Some(func) = self.iterator.take() {
-            let mut count: u64 = 0;
-            let mut latency: u64 = 0;
+            // let mut count: u64 = 0;
+            // let mut latency: u64 = 0;
             let current_time = self.time.tick();
             for val in (func)() {
-                latency = (count / self.capacity) + 1;
+                // latency = (count / self.capacity) + 1;
                 self.output
-                    .enqueue(&self.time, ChannelElement::new(current_time + latency, val))
+                    .enqueue(&self.time, ChannelElement::new(current_time + 1, val))
                     .unwrap();
-                count += 1;
+                // count += 1;
+                self.time.incr_cycles(1);
             }
-            self.time.incr_cycles(latency);
+            // self.time.incr_cycles(latency);
         } else {
             panic!("Link - No iterator available");
         }
