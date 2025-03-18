@@ -2,9 +2,9 @@ use dam::{
     simulation::{InitializationOptionsBuilder, ProgramBuilder, RunOptions},
     utility_contexts::*,
 };
+use dgemm::consumer::Consumer;
 use dgemm::gemm::Gemm;
 use dgemm::producer::Producer;
-
 #[test]
 fn xpu_linear_test() {
     const IN_FEATURES: usize = 3;
@@ -47,7 +47,7 @@ fn xpu_linear_test() {
         out_send,
         XPU_INITIATION_INTERVAL,
     ));
-    ctx.add_child(PrinterContext::new(out_recv));
+    ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv));
     println!("Ref out:{:?}", ref_out.t());
 
     let executed = ctx

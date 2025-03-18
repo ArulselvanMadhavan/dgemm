@@ -1,5 +1,6 @@
 * Pending Tasks
-- [ ] ConsumerContext
+- [X] ConsumerContext
+- [ ] Add support for Array DAMType
 - [ ] VerifyContext - Approx verify - Maybe?
 - [ ] Emit trace events
 - [ ] Decide a dataflow
