@@ -1,5 +1,5 @@
 use dam::context_tools::*;
-use ndarray::prelude::*;
+use ndarray::{prelude::*, DataOwned, DataShared};
 
 /// Constants for GEMM
 /// link_capacity - Number of elements acceptable in a send/recv
@@ -65,7 +65,7 @@ where
     fn run(&mut self) {
         let link_cap = self.constants.link_capacity;
         let in_features = self.weights.nrows();
-        let _factor = link_cap / in_features;
+        let factor = link_cap / in_features;
         let bsize = self.constants.buffer_size;
         let mut ibuf = Array::<E, _>::zeros([bsize, link_cap]);
         loop {
@@ -80,7 +80,9 @@ where
                 }
                 self.time.incr_cycles(1);
             }
-            println!("GEMM: X:{:?}", ibuf);
+            let x = ibuf.to_shape((bsize * factor, in_features)).unwrap();
+            let out = x.dot(&self.weights);
+            println!("GEMM: X:{:?}", out.shape());
             self.time.incr_cycles(self.initiation_interval);
         }
     }
