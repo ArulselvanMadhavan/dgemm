@@ -2,6 +2,7 @@
 - [X] ConsumerContext
 - [X] Add support for Array DAMType
 - [X] Add GEMM
+- [ ] Debug time cycles
 - [ ] VerifyContext - Approx verify - Maybe?
 - [ ] Emit trace events
 - [ ] Decide a dataflow

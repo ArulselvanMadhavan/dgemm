@@ -65,32 +65,59 @@ where
     fn run(&mut self) {
         let link_cap = self.constants.link_capacity;
         let in_features = self.weights.nrows();
-        let factor = link_cap / in_features;
-        let bsize = self.constants.buffer_size;
-        let mut ibuf = Array::<E, _>::zeros([bsize, link_cap]);
+        let out_features = self.weights.ncols();
+        let ifactor = link_cap / in_features;
+        let ofactor = link_cap / out_features;
+        let isize = self.constants.buffer_size;
+        let mut ibuf = Array::<E, _>::zeros([isize, link_cap]);
+        assert!((isize * ifactor) % ofactor == 0);
+        let osize = (isize * ifactor) / ofactor;
+        let mut obuf = Array::<E, _>::zeros([osize, link_cap]);
+        let mut rd_counter = 0;
+        let mut wr_counter = 0;
         loop {
-            for b in 0..bsize {
-                match self.input.dequeue(&self.time) {
-                    Ok(data) => {
-                        let row = Array::from_iter(data.data.clone().into_iter());
-                        ibuf.row_mut(b).assign(&row);
-                    }
-                    Err(_) if b == 0 => return,
-                    Err(_) => panic!("GEMM:Nothing to dequeue"),
+            // for b in 0..bsize {
+            match self.input.dequeue(&self.time) {
+                Ok(data) => {
+                    //dbg!(b, self.time.tick() + 1, data.time);
+                    let row = Array::from_iter(data.data.clone().into_iter());
+                    ibuf.row_mut(rd_counter).assign(&row);
+                    rd_counter += 1;
                 }
+                Err(_) if wr_counter > 0 => (),
+                Err(_) => {
+                    dbg!("Nothing to dequeue. Ending sim.");
+                    return;
+                }
+            }
+            // self.time.incr_cycles(1);
+            // }
+            if rd_counter == isize {
+                dbg!(
+                    "Time:",
+                    rd_counter,
+                    wr_counter,
+                    self.time.tick(),
+                    isize * ifactor * in_features * out_features
+                );
+
+                let x = ibuf.to_shape((isize * ifactor, in_features)).unwrap();
+                let out = x.dot(&self.weights);
+                obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
+                wr_counter = osize;
+                rd_counter = 0;
                 self.time.incr_cycles(1);
             }
-            dbg!("Time:", self.time.tick());
-            let x = ibuf.to_shape((bsize * factor, in_features)).unwrap();
-            let out = x.dot(&self.weights);
-            self.time.incr_cycles(1);
-            let out = out.to_shape((bsize, link_cap)).unwrap().to_owned();
-            for o in 0..bsize {
+            // self.time.incr_cycles(1);
+            // for o in 0..bsize {
+            if wr_counter > 0 {
                 let cur_time = self.time.tick();
-                let row = out.row(o).to_owned();
+                let row = obuf.row(osize - wr_counter).to_owned();
                 let ce = ChannelElement::new(cur_time + 1, row).convert::<T>();
                 self.output.enqueue(&self.time, ce).unwrap();
-                self.time.incr_cycles(1);
+                wr_counter -= 1;
+                // self.time.incr_cycles(1);
+                // }
             }
             self.time.incr_cycles(self.initiation_interval);
         }
