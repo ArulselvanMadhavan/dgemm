@@ -1,5 +1,5 @@
 use dam::context_tools::*;
-use ndarray::{prelude::*, DataOwned, DataShared};
+use ndarray::prelude::*;
 
 /// Constants for GEMM
 /// link_capacity - Number of elements acceptable in a send/recv
@@ -32,7 +32,7 @@ pub struct Gemm<E: Clone, T: Clone> {
 impl<E, T> Gemm<E, T>
 where
     E: ndarray::LinalgScalar + Send + Sync + std::fmt::Debug,
-    T: DAMType + IntoIterator<Item = E>,
+    T: DAMType + IntoIterator<Item = E> + From<Array1<E>>,
 {
     pub fn new(
         weights: Array2<E>,
@@ -60,7 +60,7 @@ where
 impl<E, T> Context for Gemm<E, T>
 where
     E: ndarray::LinalgScalar + Send + Sync + std::fmt::Debug,
-    T: DAMType + IntoIterator<Item = E>,
+    T: DAMType + IntoIterator<Item = E> + From<Array1<E>>,
 {
     fn run(&mut self) {
         let link_cap = self.constants.link_capacity;
@@ -80,9 +80,18 @@ where
                 }
                 self.time.incr_cycles(1);
             }
+            dbg!("Time:", self.time.tick());
             let x = ibuf.to_shape((bsize * factor, in_features)).unwrap();
             let out = x.dot(&self.weights);
-            println!("GEMM: X:{:?}", out.shape());
+            self.time.incr_cycles(1);
+            let out = out.to_shape((bsize, link_cap)).unwrap().to_owned();
+            for o in 0..bsize {
+                let cur_time = self.time.tick();
+                let row = out.row(o).to_owned();
+                let ce = ChannelElement::new(cur_time + 1, row).convert::<T>();
+                self.output.enqueue(&self.time, ce).unwrap();
+                self.time.incr_cycles(1);
+            }
             self.time.incr_cycles(self.initiation_interval);
         }
     }

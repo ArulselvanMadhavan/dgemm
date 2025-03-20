@@ -27,7 +27,7 @@ where
         loop {
             match self.input.dequeue(&self.time) {
                 Ok(x) => {
-                    println!("{:?}|{:?}", self.time.tick(), x.data);
+                    println!("Consumer:{:?}|{:?}", self.time.tick(), x.data);
                     count += 1;
                 }
                 Err(_) => return,

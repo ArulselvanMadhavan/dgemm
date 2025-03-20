@@ -1,7 +1,7 @@
 * Pending Tasks
 - [X] ConsumerContext
 - [X] Add support for Array DAMType
-- [ ] Add GEMM
+- [X] Add GEMM
 - [ ] VerifyContext - Approx verify - Maybe?
 - [ ] Emit trace events
 - [ ] Decide a dataflow
