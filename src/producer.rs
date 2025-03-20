@@ -39,6 +39,7 @@ where
             let current_time = self.time.tick();
             for val in (func)() {
                 // latency = (count / self.capacity) + 1;
+                dbg!("Len:{:?}", &val);
                 self.output
                     .enqueue(&self.time, ChannelElement::new(current_time + 1, val))
                     .unwrap();

@@ -1,22 +1,43 @@
 use dam::context_tools::*;
 use ndarray::prelude::*;
 
+/// Constants for GEMM
+/// link_capacity - Number of elements acceptable in a send/recv
+/// buffer_size - Number of receive msgs acceptable before starting a GEMM
+pub struct GemmConstants {
+    link_capacity: usize,
+    buffer_size: usize,
+}
+
+impl GemmConstants {
+    pub fn new(link_capacity: usize, buffer_size: usize) -> Self {
+        Self {
+            link_capacity,
+            buffer_size,
+        }
+    }
+}
+
+/// Models weight stationary systolic/dataflow GEMM
 #[context_macro]
 pub struct Gemm<E: Clone, T: Clone> {
     weights: Array2<E>,
     biases: Array1<E>,
+    constants: GemmConstants,
     input: Receiver<T>,
     output: Sender<T>,
     initiation_interval: u64,
 }
 
-impl<E, T: DAMType> Gemm<E, T>
+impl<E, T> Gemm<E, T>
 where
-    E: ndarray::LinalgScalar + Send + Sync,
+    E: ndarray::LinalgScalar + Send + Sync + std::fmt::Debug,
+    T: DAMType + IntoIterator<Item = E>,
 {
     pub fn new(
         weights: Array2<E>,
         biases: Array1<E>,
+        constants: GemmConstants,
         input: Receiver<T>,
         output: Sender<T>,
         initiation_interval: u64,
@@ -24,6 +45,7 @@ where
         let result = Self {
             weights,
             biases,
+            constants,
             input,
             output,
             initiation_interval,
@@ -37,58 +59,29 @@ where
 
 impl<E, T> Context for Gemm<E, T>
 where
-    E: ndarray::LinalgScalar + Send + Sync,
-    T: DAMType,
+    E: ndarray::LinalgScalar + Send + Sync + std::fmt::Debug,
+    T: DAMType + IntoIterator<Item = E>,
 {
-    // Simulates Pytorch Linear function
     fn run(&mut self) {
-        //     let osize = self.weights.nrows();
-        //     let isize = self.weights.ncols();
-        //     let tsize = 4;
-        //     let link_cap = tsize;
-        //     let rd_latency = 1;
-        //     let wr_latency = 1;
-        //     let matmul_latency = 1;
-        //     assert!((tsize * isize) % link_cap == 0);
-        //     assert!((tsize * osize) % link_cap == 0);
-        //     let ibsize = (tsize * isize) / link_cap;
-        //     let obsize = (tsize * osize) / link_cap;
-        //     let bias_mat = self.biases.to_shape((1, osize)).unwrap();
-        //     loop {
-        //         let mut ibuffer = Vec::with_capacity(ibsize);
-        //         let mut ibuffer = Array::zeros([ibsize, link_cap]);
-        //         for i in 0..ibsize {
-        //             match self.input.dequeue(&self.time) {
-        //                 Ok(data) => {
-        //                     println!("CT:{:?}|{:?}", self.time.tick(), data.time);
-        //                     // ibuffer.extend_from_slice(&data.data);
-        //                     // let all = Slice::new(0, None, 1);
-        //                     // let out = data.data[all];
-        //                     // ibuffer.push(data.data);
-        //                     ibuffer.slice_mut(s![i, 0..link_cap]).assign(&data.data);
-        //                     // ibuffer.row_mut(i).assign(&data.data)
-        //                 }
-        //                 Err(_) if i == 0 => return,
-        //                 Err(_) => panic!("Nothing to dequeue."),
-        //             }
-        //         }
-        //         // let ibx = ibuffer.self.time.incr_cycles(rd_latency);
-        //         let x_in = ndarray::Array2::from_shape_vec((tsize, isize), ibuffer).unwrap();
-        //         let mut output = x_in.dot(&self.weights.t());
-        //         output = output + &bias_mat;
-        //         let output = Array::from_iter(output.iter());
-        //         self.time.incr_cycles(matmul_latency);
-        //         let cur_time = self.time.tick();
-        //         for o in 0..obsize {
-        //             println!("Cur_time:{:?}|{:?}", cur_time, self.time.tick());
-        //             self.output
-        //                 .enqueue(
-        //                     &self.time,
-        //                     ChannelElement::new(cur_time + wr_latency, *output[o]),
-        //                 )
-        //                 .unwrap();
-        //         }
-        //         self.time.incr_cycles(self.initiation_interval);
-        //     }
+        let link_cap = self.constants.link_capacity;
+        let in_features = self.weights.nrows();
+        let _factor = link_cap / in_features;
+        let bsize = self.constants.buffer_size;
+        let mut ibuf = Array::<E, _>::zeros([bsize, link_cap]);
+        loop {
+            for b in 0..bsize {
+                match self.input.dequeue(&self.time) {
+                    Ok(data) => {
+                        let row = Array::from_iter(data.data.clone().into_iter());
+                        ibuf.row_mut(b).assign(&row);
+                    }
+                    Err(_) if b == 0 => return,
+                    Err(_) => panic!("GEMM:Nothing to dequeue"),
+                }
+                self.time.incr_cycles(1);
+            }
+            println!("GEMM: X:{:?}", ibuf);
+            self.time.incr_cycles(self.initiation_interval);
+        }
     }
 }
