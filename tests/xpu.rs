@@ -4,7 +4,6 @@ use dgemm::{
     gemm::{Gemm, GemmConstants},
     producer::Producer,
 };
-use itertools::Itertools;
 use ndarray::*;
 
 #[test]
@@ -19,6 +18,9 @@ fn xpu_linear_test() {
     const W_SIZE: usize = IN_FEATURES * OUT_FEATURES;
     const X_SIZE: usize = NUM_INPUTS * IN_FEATURES;
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
+
+    let processes = vec![("xpu".to_string(), vec!["xpu1".to_string()])];
+    let tuuids = dgemm::trace::get_trace_descriptors(processes, 2, 1);
 
     let mut ctx = ProgramBuilder::default();
     let (x_send, x_recv) = ctx.bounded::<Array1<f64>>(BUFFER_CAPACITY);
@@ -47,7 +49,7 @@ fn xpu_linear_test() {
     ctx.add_child(Gemm::new(
         weight_mat,
         biases,
-        GemmConstants::new(LINK_CAPACITY, BUFFER_CAPACITY),
+        GemmConstants::new(LINK_CAPACITY, BUFFER_CAPACITY, 0, *tuuids.get(0).unwrap()),
         x_recv,
         out_send,
         1,

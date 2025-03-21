@@ -1,0 +1,95 @@
+use std::fs::File;
+
+use protobuf::{CodedOutputStream, Message, MessageField};
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use perfetto::*;
+use uuid::Uuid;
+
+fn mk_track_desc() -> (TracePacket, TrackDescriptor) {
+    let tp = TracePacket::new();
+    let mut tdesc = TrackDescriptor::new();
+    let p_uuid = Uuid::new_v4();
+    let (_, p_lsb) = p_uuid.as_u64_pair();
+    tdesc.set_uuid(p_lsb);
+    (tp, tdesc)
+}
+
+fn mk_process_desc(pid: i32, pname: String) -> MessageField<ProcessDescriptor> {
+    let mut pdesc = ProcessDescriptor::new();
+    pdesc.set_pid(pid);
+    pdesc.set_process_name(pname);
+    MessageField::some(pdesc)
+}
+
+fn mk_thread_desc(pid: i32, tid: i32, tname: String) -> MessageField<ThreadDescriptor> {
+    let mut tdesc = ThreadDescriptor::new();
+    tdesc.set_pid(pid);
+    tdesc.set_tid(tid);
+    tdesc.set_thread_name(tname);
+    MessageField::some(tdesc)
+}
+
+pub fn write_trace(fname: &str, tpkts: Vec<TracePacket>) {
+    let mut trace = Trace::new();
+    trace.packet = tpkts;
+    let mut file = File::create(fname).unwrap();
+    let mut cos = CodedOutputStream::new(&mut file);
+    trace.write_to(&mut cos).unwrap();
+    cos.flush().unwrap();
+}
+
+pub fn mk_time_slice(
+    tid: u32,
+    thread_uuid: u64,
+    tname: &str,
+    timestamps: [u64; 2],
+) -> [TracePacket; 2] {
+    let mut tpkts = [TracePacket::new(), TracePacket::new()];
+    for (idx, tstamp) in timestamps.into_iter().enumerate() {
+        tpkts[idx].set_timestamp(tstamp);
+        tpkts[idx].set_trusted_packet_sequence_id(tid as u32);
+        let mut tevt = TrackEvent::new();
+        if idx == 0 {
+            tevt.set_type(track_event::Type::TYPE_SLICE_BEGIN);
+            tevt.set_name(tname.to_string());
+        } else {
+            tevt.set_type(track_event::Type::TYPE_SLICE_END);
+        }
+        tevt.set_track_uuid(thread_uuid);
+        tpkts[idx].set_track_event(tevt);
+    }
+    tpkts
+}
+pub fn get_trace_descriptors(
+    processes: Vec<(String, Vec<String>)>,
+    desc_count: usize,
+    thread_count: usize,
+) -> Vec<u64> {
+    let mut pid = 0;
+    let mut tpkts = Vec::with_capacity(desc_count);
+    let mut tuuids = Vec::with_capacity(thread_count);
+    for p in processes.into_iter() {
+        let (pname, threads) = p;
+        let (mut tpkt, mut tdesc) = mk_track_desc();
+        tdesc.process = mk_process_desc(pid, pname);
+        tpkt.set_track_descriptor(tdesc);
+        tpkts.push(tpkt);
+        let mut tid = 0;
+        for tname in threads.into_iter() {
+            let (mut tpkt, mut tdesc) = mk_track_desc();
+            let thread_uuid = tdesc.uuid();
+            tdesc.set_static_name(tname.clone());
+            tdesc.thread = mk_thread_desc(pid, tid, tname);
+            tpkt.set_track_descriptor(tdesc);
+            tpkts.push(tpkt);
+            tuuids.push(thread_uuid);
+            // Build Track events
+            // let tpkt_pair = mk_time_slice(tid as u32, thread_uuid, "SAMPLE_EVT", [200, 250]);
+            // tpkts.extend_from_slice(&tpkt_pair);
+            tid += 1;
+        }
+        pid += 1;
+    }
+    write_trace("header.perfetto", tpkts);
+    tuuids
+}

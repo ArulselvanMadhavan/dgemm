@@ -2,7 +2,11 @@
 - [X] ConsumerContext
 - [X] Add support for Array DAMType
 - [X] Add GEMM
-- [ ] Debug time cycles
+- [X] Debug time cycles
+- [X] Add protobuf
+- [ ] Protobuf nested scope. Consider breaking begin and end as separate evts;
+- [ ] Matmul verification
+- [ ] Two senders; Two receivers
 - [ ] VerifyContext - Approx verify - Maybe?
 - [ ] Emit trace events
 - [ ] Decide a dataflow

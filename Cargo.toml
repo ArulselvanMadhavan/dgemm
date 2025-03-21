@@ -5,5 +5,11 @@ edition = "2024"
 
 [dependencies]
 dam = { git = "https://github.com/stanford-ppl/DAM-RS.git", branch = "master" }
-itertools = "0.14.0"
+itertools = "^0.14.0"
 ndarray = "0.15.6"
+protobuf = "^3.7.2"
+uuid = "^1.16.0"
+
+[build-dependencies]
+protoc-rust = "^2.0"
+protobuf-codegen = "3.7.2"
