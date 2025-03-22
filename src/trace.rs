@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use protobuf::{CodedOutputStream, Message, MessageField};
+use protobuf::{CodedOutputStream, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use perfetto::*;
 use uuid::Uuid;

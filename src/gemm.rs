@@ -122,8 +122,6 @@ where
         let mut is_rd_ctrl = true;
         let mut is_wr_ctrl = false;
         let mut is_mm_ctrl = false;
-        // trace.write_to(os)
-        // trace.write_to(&mut cos).unwrap();
         let mut trace = Trace::new();
         let mut file = File::create(format!(
             "gemm{tid}.perfetto",
@@ -162,14 +160,14 @@ where
                 tpkts.extend_from_slice(&self.evt_slice("GEMM", 2, mm_cycles + 1));
                 self.time.incr_cycles(mm_cycles);
             }
+            trace.packet = tpkts;
+            trace.write_to(&mut cos).unwrap();
             is_rd_ctrl = rd_counter < isize;
             is_wr_ctrl = wr_counter > 0;
             is_mm_ctrl = rd_counter == isize && wr_counter == 0;
             self.time.incr_cycles(self.initiation_interval);
-            trace.packet = tpkts;
-            trace.write_to(&mut cos).unwrap();
         }
-        dbg!("Nothing to dequeue. Ending sim.");
+        dbg!("Ending sim.");
         cos.flush().unwrap();
     }
 }

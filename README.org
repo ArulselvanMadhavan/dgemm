@@ -4,7 +4,11 @@
 - [X] Add GEMM
 - [X] Debug time cycles
 - [X] Add protobuf
-- [ ] Protobuf nested scope. Consider breaking begin and end as separate evts;
+- [X] Protobuf nested scope. Consider breaking begin and end as separate evts;
+- [X] Add mesh connections
+- [ ] Wire up connections with contexts
+- [ ] Add second input.
+- [ ] Add second output
 - [ ] Matmul verification
 - [ ] Two senders; Two receivers
 - [ ] VerifyContext - Approx verify - Maybe?
