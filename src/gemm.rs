@@ -1,7 +1,13 @@
-use dam::{context_tools::*, structures::Time};
-use ndarray::prelude::*;
+use std::fs::File;
 
-use crate::trace::{self, perfetto::TracePacket};
+use dam::context_tools::*;
+use ndarray::prelude::*;
+use protobuf::{CodedOutputStream, Message};
+
+use crate::trace::{
+    self,
+    perfetto::{Trace, TracePacket},
+};
 
 /// Constants for GEMM
 /// link_capacity - Number of elements acceptable in a send/recv
@@ -10,16 +16,21 @@ pub struct GemmConstants {
     link_capacity: usize,
     buffer_size: usize,
     thread_id: u32,
-    thread_uuid: u64,
+    track_ids: [u64; 3],
 }
 
 impl GemmConstants {
-    pub fn new(link_capacity: usize, buffer_size: usize, thread_id: u32, thread_uuid: u64) -> Self {
+    pub fn new(
+        link_capacity: usize,
+        buffer_size: usize,
+        thread_id: u32,
+        track_ids: [u64; 3],
+    ) -> Self {
         Self {
             link_capacity,
             buffer_size,
             thread_id,
-            thread_uuid,
+            track_ids,
         }
     }
 }
@@ -40,14 +51,32 @@ where
     E: ndarray::LinalgScalar + Send + Sync + std::fmt::Debug,
     T: DAMType + IntoIterator<Item = E> + From<Array1<E>>,
 {
-    fn publish_evt(&self, evt_name: &str, start: u64) -> [TracePacket; 2] {
+    fn evt_slice(&self, evt_name: &str, track_idx: usize, count: u64) -> [TracePacket; 2] {
+        let cur_time = self.time.tick().time();
         trace::mk_time_slice(
             self.constants.thread_id,
-            self.constants.thread_uuid,
+            self.constants.track_ids[track_idx],
             evt_name,
-            [start, self.time.tick().time()],
+            [cur_time, cur_time + count],
         )
     }
+
+    // fn evt_begin(&self, evt_name: &str) -> TracePacket {
+    //     trace::slice_begin(
+    //         self.constants.thread_id,
+    //         self.constants.thread_uuid,
+    //         evt_name,
+    //         self.time.tick().time(),
+    //     )
+    // }
+
+    // fn evt_end(&self) -> TracePacket {
+    //     trace::slice_end(
+    //         self.constants.thread_id,
+    //         self.constants.thread_uuid,
+    //         self.time.tick().time(),
+    //     )
+    // }
 
     pub fn new(
         weights: Array2<E>,
@@ -90,64 +119,57 @@ where
         let mut obuf = Array::<E, _>::zeros([osize, link_cap]);
         let mut rd_counter = 0;
         let mut wr_counter = 0;
-        // const MAX_EVTS_PER_CYCLE: usize = 3;
-        // let mut tpkts = Vec::<TracePacket>::with_capacity(MAX_EVTS_PER_CYCLE * 2);
-        let mut tpkts = Vec::<TracePacket>::with_capacity(isize);
-        let mut rd_begin = Time::default();
-        let mut mm_begin = Time::default();
-        let mut wr_begin = Time::default();
-        let mut is_mm_ready = false;
+        let mut is_rd_ctrl = true;
+        let mut is_wr_ctrl = false;
+        let mut is_mm_ctrl = false;
+        // trace.write_to(os)
+        // trace.write_to(&mut cos).unwrap();
+        let mut trace = Trace::new();
+        let mut file = File::create(format!(
+            "gemm{tid}.perfetto",
+            tid = self.constants.thread_id
+        ))
+        .unwrap();
+        let mut cos = CodedOutputStream::new(&mut file);
         loop {
-            if rd_counter < isize {
+            let mut tpkts = Vec::<TracePacket>::with_capacity(self.constants.track_ids.len() * 2);
+            if is_rd_ctrl {
                 match self.input.dequeue(&self.time) {
                     Ok(data) => {
                         let row = Array::from_iter(data.data.clone().into_iter());
                         ibuf.row_mut(rd_counter).assign(&row);
-                        if rd_counter == 0 {
-                            rd_begin = self.time.tick();
-                        }
                         rd_counter += 1;
+                        tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 0, 1));
                     }
                     Err(_) if wr_counter > 0 => (),
-                    Err(_) => {
-                        trace::write_trace(
-                            format!("gemm{tid}.perfetto", tid = self.constants.thread_id).as_str(),
-                            tpkts,
-                        );
-                        dbg!("Nothing to dequeue. Ending sim.");
-                        return;
-                    }
+                    Err(_) => break,
                 }
-            } else if rd_counter == isize {
-                tpkts.extend_from_slice(&self.publish_evt("RD_BUF_IN", rd_begin.time()));
-                is_mm_ready = true;
-            } else {
-                panic!("GEMM Rd counter > buffer size")
             }
-
-            if is_mm_ready {
-                mm_begin = self.time.tick();
+            if is_wr_ctrl {
+                let row = obuf.row(osize - wr_counter).to_owned();
+                let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
+                self.output.enqueue(&self.time, ce).unwrap();
+                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 1, 1));
+                wr_counter -= 1;
+            }
+            if is_mm_ctrl {
                 let x = ibuf.to_shape((isize * ifactor, in_features)).unwrap();
                 let out = x.dot(&self.weights);
                 obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
                 wr_counter = osize;
                 rd_counter = 0;
-                self.time.incr_cycles((isize + osize) as u64);
-                tpkts.extend_from_slice(&self.publish_evt("GEMM", mm_begin.time()));
-                is_mm_ready = false;
-                wr_begin = self.time.tick();
+                let mm_cycles = (isize + osize - 1) as u64;
+                tpkts.extend_from_slice(&self.evt_slice("GEMM", 2, mm_cycles + 1));
+                self.time.incr_cycles(mm_cycles);
             }
-            if wr_counter > 0 {
-                let cur_time = self.time.tick();
-                let row = obuf.row(osize - wr_counter).to_owned();
-                let ce = ChannelElement::new(cur_time + 1, row).convert::<T>();
-                self.output.enqueue(&self.time, ce).unwrap();
-                wr_counter -= 1;
-                if wr_counter == 0 {
-                    tpkts.extend_from_slice(&self.publish_evt("WR_BUF_OUT", wr_begin.time()))
-                }
-            }
+            is_rd_ctrl = rd_counter < isize;
+            is_wr_ctrl = wr_counter > 0;
+            is_mm_ctrl = rd_counter == isize && wr_counter == 0;
             self.time.incr_cycles(self.initiation_interval);
+            trace.packet = tpkts;
+            trace.write_to(&mut cos).unwrap();
         }
+        dbg!("Nothing to dequeue. Ending sim.");
+        cos.flush().unwrap();
     }
 }

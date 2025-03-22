@@ -18,10 +18,9 @@ fn xpu_linear_test() {
     const W_SIZE: usize = IN_FEATURES * OUT_FEATURES;
     const X_SIZE: usize = NUM_INPUTS * IN_FEATURES;
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
-
+    const TRACKS_PER_THREAD: usize = 3;
     let processes = vec![("xpu".to_string(), vec!["xpu1".to_string()])];
-    let tuuids = dgemm::trace::get_trace_descriptors(processes, 2, 1);
-
+    let tuuids = dgemm::trace::get_trace_descriptors::<TRACKS_PER_THREAD>(processes, 2, 1);
     let mut ctx = ProgramBuilder::default();
     let (x_send, x_recv) = ctx.bounded::<Array1<f64>>(BUFFER_CAPACITY);
     let (out_send, out_recv) = ctx.bounded::<Array1<f64>>(BUFFER_CAPACITY);
