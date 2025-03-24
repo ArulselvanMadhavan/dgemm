@@ -8,7 +8,7 @@
 - [X] Add mesh connections
 - [X] Wire up connections with contexts
 - [X] Producers with delay
-- [ ] Inputs derived from N
+- [X] Inputs derived from N
 - [ ] Add bias support
 - [ ] Verify Context
 - [ ] Add second input.
