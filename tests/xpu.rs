@@ -141,9 +141,19 @@ fn xpu_linear_test() {
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
     const TRACKS_PER_THREAD: usize = 3;
     const DIMS: [usize; 2] = [1, 1];
+
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);
-    let processes = vec![("xpu".to_string(), vec!["xpu1".to_string()])];
-    let tuuids = dgemm::trace::get_trace_descriptors::<TRACKS_PER_THREAD>(processes, 2, 1);
+    // Trace descriptors
+    let thread_names = (0..num_nodes).map(|n| format!("xpu{n}", n = n));
+    let thread_names = Vec::from_iter(thread_names);
+    let thread_count = thread_names.len();
+    let processes = vec![("xpu".to_string(), thread_names)];
+    let tuuids = dgemm::trace::get_trace_descriptors::<TRACKS_PER_THREAD>(
+        processes,
+        thread_count + 1,
+        thread_count,
+    );
+    // Build Mesh
     let mut ctx = ProgramBuilder::default();
     let (mut in_conns, mut out_conns, mut in_prods, mut out_cons) =
         mesh_conn::<f64>(DIMS, BUFFER_CAPACITY, &mut ctx);
@@ -176,23 +186,36 @@ fn xpu_linear_test() {
             out_conns.remove(0),
             1,
         ));
+        let pdelay = 5;
         match in_prods.remove(0) {
             [Some(x_send), None] => {
                 let x_payload = x_mat_vec.clone();
-                ctx.add_child(Producer::new(|| x_payload.into_iter(), x_send, node_id));
+                ctx.add_child(Producer::new(
+                    || x_payload.into_iter(),
+                    x_send,
+                    node_id,
+                    pdelay,
+                ));
             }
             [None, Some(x_send)] => ctx.add_child(Producer::new(
                 || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
                 x_send,
                 node_id,
+                pdelay,
             )),
             [Some(r_send), Some(d_send)] => {
                 let x_payload = x_mat_vec.clone();
-                ctx.add_child(Producer::new(|| x_payload.into_iter(), r_send, node_id));
+                ctx.add_child(Producer::new(
+                    || x_payload.into_iter(),
+                    r_send,
+                    node_id,
+                    pdelay,
+                ));
                 ctx.add_child(Producer::new(
                     || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
                     d_send,
                     node_id,
+                    pdelay,
                 ));
             }
             [None, None] => (),
