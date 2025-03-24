@@ -179,7 +179,16 @@ fn xpu_linear_test() {
                 x_send,
                 node_id,
             )),
-            _ => (),
+            [Some(r_send), Some(d_send)] => {
+                let x_payload = x_mat_vec.clone();
+                ctx.add_child(Producer::new(|| x_payload.into_iter(), r_send, node_id));
+                ctx.add_child(Producer::new(
+                    || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
+                    d_send,
+                    node_id,
+                ));
+            }
+            [None, None] => (),
         }
         match out_cons.remove(0) {
             [Some(out_recv), None] => {
@@ -189,6 +198,10 @@ fn xpu_linear_test() {
             [None, Some(out_recv)] => {
                 // Verify Consumer
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv, node_id))
+            }
+            [Some(l_recv), Some(u_recv)] => {
+                ctx.add_child(Consumer::new(OUT_FEATURES as u64, l_recv, node_id));
+                ctx.add_child(Consumer::new(OUT_FEATURES as u64, u_recv, node_id));
             }
             _ => (),
         }
