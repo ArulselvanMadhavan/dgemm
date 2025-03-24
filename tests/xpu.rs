@@ -134,7 +134,8 @@ fn xpu_linear_test() {
     assert!(LINK_CAPACITY % IN_FEATURES == 0);
     assert!(LINK_CAPACITY % OUT_FEATURES == 0);
     const BUFFER_CAPACITY: usize = 2;
-    const NUM_INPUTS: usize = (LINK_CAPACITY / IN_FEATURES) * BUFFER_CAPACITY * 3;
+    const NUM_MATMULS: usize = 3;
+    const NUM_INPUTS: usize = (LINK_CAPACITY / IN_FEATURES) * BUFFER_CAPACITY * NUM_MATMULS;
     const W_SIZE: usize = IN_FEATURES * OUT_FEATURES;
     const X_SIZE: usize = NUM_INPUTS * IN_FEATURES;
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
@@ -164,7 +165,13 @@ fn xpu_linear_test() {
         ctx.add_child(Gemm::new(
             weight_mat.clone(), // FIXME: Make matrix dims N, IN_F , OUT_F
             biases.clone(),     // FIXME
-            GemmConstants::new(LINK_CAPACITY, BUFFER_CAPACITY, 0, *tuuids.get(0).unwrap()),
+            GemmConstants::new(
+                LINK_CAPACITY,
+                BUFFER_CAPACITY,
+                0,
+                *tuuids.get(0).unwrap(),
+                NUM_MATMULS,
+            ),
             in_conns.remove(0),
             out_conns.remove(0),
             1,
@@ -208,7 +215,6 @@ fn xpu_linear_test() {
     });
 
     // println!("Ref out:{:?}", ref_out.t());
-    dbg!(ctx.num_children());
     let executed = ctx
         .initialize(
             InitializationOptionsBuilder::default()

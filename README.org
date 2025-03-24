@@ -6,7 +6,10 @@
 - [X] Add protobuf
 - [X] Protobuf nested scope. Consider breaking begin and end as separate evts;
 - [X] Add mesh connections
-- [ ] Wire up connections with contexts
+- [X] Wire up connections with contexts
+- [ ] Producers with delay
+- [ ] Add bias support
+- [ ] Verify Context
 - [ ] Add second input.
 - [ ] Add second output
 - [ ] Matmul verification
