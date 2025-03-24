@@ -160,22 +160,20 @@ fn xpu_linear_test() {
     // Inputs
     let weight_mat = Array::range(0., (num_nodes * W_SIZE) as f64, 1.);
     let weight_mat = weight_mat
-        .to_shape((num_nodes, IN_FEATURES, OUT_FEATURES))
+        .to_shape((DIMS[0], IN_FEATURES, DIMS[1], OUT_FEATURES))
         .unwrap()
         .to_owned();
     let x_mat = Array::range(0., (DIMS[0] * X_SIZE) as f64, 1.)
-        .into_shape([NUM_INPUTS, DIMS[0] * IN_FEATURES])
+        .into_shape([NUM_INPUTS, DIMS[0], IN_FEATURES])
         .unwrap();
-    let x_mat_t = x_mat.t();
-    let x_mat_t = x_mat_t
-        .to_shape((DIMS[0], IN_FEATURES, NUM_INPUTS))
-        .unwrap()
-        .to_owned();
     let biases = ndarray::Array::<f64, _>::linspace(0.0, OUT_FEATURES as f64, OUT_FEATURES);
 
     // Build contexts
     (0..num_nodes).for_each(|node_id| {
-        let wmat = weight_mat.select(Axis(0), &[node_id]).remove_axis(Axis(0));
+        let row_id = node_id / DIMS[1];
+        let col_id = node_id - (row_id * DIMS[1]);
+        let wmat = weight_mat.select(Axis(2), &[col_id]).remove_axis(Axis(2));
+        let wmat = wmat.select(Axis(0), &[row_id]).remove_axis(Axis(0));
         ctx.add_child(Gemm::new(
             wmat,
             biases.clone(),
@@ -193,7 +191,7 @@ fn xpu_linear_test() {
         let pdelay = 5;
         let build_input = |node_id: usize| {
             let x_dim_id = node_id / DIMS[1];
-            let xmat = x_mat_t.select(Axis(0), &[x_dim_id]).remove_axis(Axis(0));
+            let xmat = x_mat.select(Axis(1), &[x_dim_id]).remove_axis(Axis(1));
             let xmat = xmat.to_shape((X_SEND_STEPS, LINK_CAPACITY)).unwrap();
             let mut x_mat_vec = Vec::with_capacity(X_SEND_STEPS);
             xmat.map_axis(Axis(1), |x| x_mat_vec.push(x.to_owned()));
@@ -251,8 +249,11 @@ fn xpu_linear_test() {
     let w_ref = weight_mat
         .to_shape([DIMS[0] * IN_FEATURES, DIMS[1] * OUT_FEATURES])
         .unwrap();
-    let ref_out = x_mat.dot(&w_ref);
-    println!("Ref out:{:?}", ref_out);
+    let ref_out = x_mat
+        .to_shape((NUM_INPUTS, DIMS[0] * IN_FEATURES))
+        .unwrap()
+        .dot(&w_ref);
+    println!("Ref out:{:?}@{:?}={:?}", x_mat, w_ref, ref_out);
     let executed = ctx
         .initialize(
             InitializationOptionsBuilder::default()

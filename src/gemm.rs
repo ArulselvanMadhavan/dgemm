@@ -162,8 +162,7 @@ where
                 wr_counter -= 1;
             }
             if is_mm_ctrl {
-                let x = ibuf.to_shape((in_features, isize * ifactor)).unwrap();
-                let x = x.t();
+                let x = ibuf.to_shape((isize * ifactor, in_features)).unwrap();
                 let out = x.dot(&self.weights);
                 obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
                 wr_counter = osize;
