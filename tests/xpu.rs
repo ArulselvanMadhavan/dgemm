@@ -158,23 +158,22 @@ fn xpu_linear_test() {
     let (mut in_conns, mut out_conns, mut in_prods, mut out_cons) =
         mesh_conn::<f64>(DIMS, BUFFER_CAPACITY, &mut ctx);
     // Inputs
-    let weight_mat = Array::range(0., W_SIZE as f64, 1.);
+    let weight_mat = Array::range(0., (num_nodes * W_SIZE) as f64, 1.);
     let weight_mat = weight_mat
-        .to_shape((IN_FEATURES, OUT_FEATURES))
+        .to_shape((num_nodes, IN_FEATURES, OUT_FEATURES))
         .unwrap()
         .to_owned();
-    let x_mat = Array::range(0., X_SIZE as f64, 1.)
-        .into_shape([X_SEND_STEPS, LINK_CAPACITY])
+    let x_mat = Array::range(0., (DIMS[0] * X_SIZE) as f64, 1.)
+        .into_shape([DIMS[0], X_SEND_STEPS, LINK_CAPACITY])
         .unwrap();
     let biases = ndarray::Array::<f64, _>::linspace(0.0, OUT_FEATURES as f64, OUT_FEATURES);
-    let mut x_mat_vec = Vec::with_capacity(X_SEND_STEPS);
-    x_mat.map_axis(Axis(1), |x| x_mat_vec.push(x.to_owned()));
 
     // Build contexts
     (0..num_nodes).for_each(|node_id| {
+        let wmat = weight_mat.select(Axis(0), &[node_id]).remove_axis(Axis(0));
         ctx.add_child(Gemm::new(
-            weight_mat.clone(), // FIXME: Make matrix dims N, IN_F , OUT_F
-            biases.clone(),     // FIXME
+            wmat,
+            biases.clone(),
             GemmConstants::new(
                 LINK_CAPACITY,
                 BUFFER_CAPACITY,
@@ -187,11 +186,18 @@ fn xpu_linear_test() {
             1,
         ));
         let pdelay = 5;
+        let build_input = |node_id: usize| {
+            let x_dim_id = node_id / DIMS[1];
+            let xmat = x_mat.select(Axis(0), &[x_dim_id]).remove_axis(Axis(0));
+            let mut x_mat_vec = Vec::with_capacity(X_SEND_STEPS);
+            xmat.map_axis(Axis(1), |x| x_mat_vec.push(x.to_owned()));
+            x_mat_vec
+        };
         match in_prods.remove(0) {
             [Some(x_send), None] => {
-                let x_payload = x_mat_vec.clone();
+                let x_mat_vec = build_input(node_id);
                 ctx.add_child(Producer::new(
-                    || x_payload.into_iter(),
+                    || x_mat_vec.into_iter(),
                     x_send,
                     node_id,
                     pdelay,
@@ -204,9 +210,9 @@ fn xpu_linear_test() {
                 pdelay,
             )),
             [Some(r_send), Some(d_send)] => {
-                let x_payload = x_mat_vec.clone();
+                let x_mat_vec = build_input(node_id);
                 ctx.add_child(Producer::new(
-                    || x_payload.into_iter(),
+                    || x_mat_vec.into_iter(),
                     r_send,
                     node_id,
                     pdelay,
