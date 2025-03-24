@@ -4,13 +4,15 @@ use dam::context_tools::*;
 pub struct Consumer<T: DAMType> {
     capacity: u64,
     input: Receiver<T>,
+    node_id: usize,
 }
 
 impl<T: DAMType> Consumer<T> {
-    pub fn new(capacity: u64, input: Receiver<T>) -> Self {
+    pub fn new(capacity: u64, input: Receiver<T>, node_id: usize) -> Self {
         let result = Self {
             capacity,
             input,
+            node_id,
             context_info: Default::default(),
         };
         result.input.attach_receiver(&result);
@@ -27,7 +29,12 @@ where
         loop {
             match self.input.dequeue(&self.time) {
                 Ok(x) => {
-                    println!("Consumer:{:?}|{:?}", self.time.tick(), x.data);
+                    println!(
+                        "Consumer:{:?}|{:?}|{:?}",
+                        self.node_id,
+                        self.time.tick(),
+                        x.data
+                    );
                     count += 1;
                 }
                 Err(_) => return,
