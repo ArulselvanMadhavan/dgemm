@@ -16,7 +16,7 @@ pub struct GemmConstants {
     link_capacity: usize,
     buffer_size: usize,
     thread_id: u32,
-    track_ids: [u64; 3],
+    track_ids: [u64; 5],
     num_matmuls: usize,
 }
 
@@ -25,7 +25,7 @@ impl GemmConstants {
         link_capacity: usize,
         buffer_size: usize,
         thread_id: u32,
-        track_ids: [u64; 3],
+        track_ids: [u64; 5], // FIXME: Make it a const generic
         num_matmuls: usize,
     ) -> Self {
         Self {
@@ -160,12 +160,12 @@ where
                 }
             }
             if is_rd_ctrl2 {
-                match self.input[0].dequeue(&self.time) {
+                match self.input[1].dequeue(&self.time) {
                     Ok(data) => {
                         let row = Array::from_iter(data.data.clone().into_iter());
                         cbuf.row_mut(rd_counter2).assign(&row);
                         rd_counter2 += 1;
-                        tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 0, 1));
+                        tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 1, 1));
                     }
                     Err(_) => {
                         let dbg_str = format!(
@@ -182,20 +182,19 @@ where
                 let row = obuf.row(osize - wr_counter1).to_owned();
                 let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
                 self.output[1].enqueue(&self.time, ce).unwrap();
-                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 1, 1));
+                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 2, 1));
                 wr_counter1 -= 1;
             }
             if is_wr_ctrl2 {
                 let row = ibuf.row(isize - wr_counter2).to_owned();
                 let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
-                self.output[1].enqueue(&self.time, ce).unwrap();
-                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 1, 1));
+                self.output[0].enqueue(&self.time, ce).unwrap();
+                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 3, 1));
                 wr_counter2 -= 1;
             }
             if is_mm_ctrl {
                 let x = ibuf.to_shape((isize * ifactor, in_features)).unwrap();
                 let out = x.dot(&self.weights);
-                dbg!(ibuf.shape());
                 // println!("{:?}|{:?}", self.constants.thread_id, x);
                 // println!("{:?}|{:?}", self.constants.thread_id, self.weights);
                 obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
@@ -204,7 +203,7 @@ where
                 rd_counter1 = 0;
                 rd_counter2 = 0;
                 let mm_cycles = (isize + osize - 1) as u64;
-                tpkts.extend_from_slice(&self.evt_slice("GEMM", 2, mm_cycles + 1));
+                tpkts.extend_from_slice(&self.evt_slice("GEMM", 4, mm_cycles + 1));
                 self.time.incr_cycles(mm_cycles);
                 num_matmuls += 1;
             }

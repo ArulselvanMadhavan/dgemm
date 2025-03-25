@@ -155,7 +155,7 @@ fn xpu_linear_test() {
     const W_SIZE: usize = IN_FEATURES * OUT_FEATURES;
     const X_SIZE: usize = NUM_INPUTS * IN_FEATURES;
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
-    const TRACKS_PER_THREAD: usize = 3;
+    const TRACKS_PER_THREAD: usize = 5;
     const DIMS: [usize; 2] = [1, 2];
 
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);
@@ -279,7 +279,7 @@ fn xpu_linear_test() {
         .unwrap()
         .dot(&w_ref);
     println!("NUM CS:{:?}", ctx.num_children());
-    //println!("Ref out:{:?}@{:?}={:?}", x_mat, w_ref, ref_out);
+    println!("Ref out:{:?}@{:?}={:?}", x_mat, w_ref, ref_out);
     let executed = ctx
         .initialize(
             InitializationOptionsBuilder::default()
