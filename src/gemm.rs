@@ -134,6 +134,7 @@ where
         let mut cos = CodedOutputStream::new(&mut file);
         let mut num_matmuls = 0;
         loop {
+            dbg!(self.constants.thread_id);
             let mut tpkts = Vec::<TracePacket>::with_capacity(self.constants.track_ids.len() * 2);
             if is_rd_ctrl {
                 match self.input[0].dequeue(&self.time) {
@@ -157,13 +158,15 @@ where
             if is_wr_ctrl {
                 let row = obuf.row(osize - wr_counter).to_owned();
                 let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
-                self.output[0].enqueue(&self.time, ce).unwrap();
+                self.output[1].enqueue(&self.time, ce).unwrap();
                 tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 1, 1));
                 wr_counter -= 1;
             }
             if is_mm_ctrl {
                 let x = ibuf.to_shape((isize * ifactor, in_features)).unwrap();
                 let out = x.dot(&self.weights);
+                println!("{:?}|{:?}", self.constants.thread_id, x);
+                println!("{:?}|{:?}", self.constants.thread_id, self.weights);
                 obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
                 wr_counter = osize;
                 rd_counter = 0;

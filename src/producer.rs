@@ -41,6 +41,7 @@ where
             self.time.incr_cycles(self.init_delay as u64);
             let current_time = self.time.tick();
             for val in (func)() {
+                println!("Prod-{:?}|{:?}", self.node_id, val);
                 self.output
                     .enqueue(&self.time, ChannelElement::new(current_time + 1, val))
                     .unwrap();

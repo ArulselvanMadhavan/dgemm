@@ -7,8 +7,13 @@ use dgemm::{
     gemm::{Gemm, GemmConstants},
     producer::Producer,
 };
+use itertools::Itertools;
 use ndarray::*;
 
+/// Assign Sender,Receiver channel pair based on Conn matrix
+/// Each row in Conn matrix sums upto a max value of 1
+/// If the row is all zeros, the receiver is a consumer.
+///
 fn assign_chan<'a, T: Clone + 'a>(
     n: usize,
     buffer_size: usize,
@@ -20,41 +25,49 @@ fn assign_chan<'a, T: Clone + 'a>(
     Vec<Option<Sender<Array1<T>>>>,
     Vec<Option<Receiver<Array1<T>>>>,
 ) {
-    let mut sd_chan = Vec::<Sender<Array1<T>>>::with_capacity(n);
-    let mut rx_chan = Vec::<Receiver<Array1<T>>>::with_capacity(n);
-    let mut rx_cons = Vec::<Option<Receiver<Array1<T>>>>::with_capacity(n);
-    let mut sd_prod = Vec::<Option<Sender<Array1<T>>>>::with_capacity(n);
-
+    let mut sd_chan = Array1::<Option<Sender<Array1<T>>>>::default(n);
+    let mut rx_chan = Array1::<Option<Receiver<Array1<T>>>>::default(n);
+    let mut rx_cons = Array1::<Option<Receiver<Array1<T>>>>::default(n);
+    let mut sd_prod = Array1::<Option<Sender<Array1<T>>>>::default(n);
     for s in 0..n {
-        rx_cons.push(None);
-        sd_prod.push(None);
         let mut count = 0;
         for r in 0..n {
-            if conn.slice(s![s, r]).eq(&arr0(true)) {
+            if conn[(s, r)] {
                 let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
-                sd_chan.push(tx);
-                rx_chan.push(rx);
+                sd_chan[s] = Some(tx);
+                rx_chan[r] = Some(rx);
                 count += 1;
             }
         }
         if count == 0 {
             let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
-            sd_chan.push(tx);
-            rx_cons[s] = Some(rx); // consumer
+            sd_chan[s] = Some(tx);
+            rx_cons[s] = Some(rx);
+            count += 1;
         }
+        assert!(count == 1);
         count = 0;
         for r in 0..n {
-            if conn.slice(s![r, s]).eq(&arr0(true)) {
+            if conn[(r, s)] {
+                let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
+                rx_chan[s] = Some(rx);
+                sd_chan[s] = Some(tx);
                 count += 1;
             }
         }
         if count == 0 {
             let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
-            sd_prod[s] = Some(tx); // producer
-            rx_chan.push(rx);
+            rx_chan[s] = Some(rx);
+            sd_prod[s] = Some(tx);
+            count += 1;
         }
+        assert!(count == 1);
     }
+    let sd_chan = Vec::from_iter(sd_chan.into_iter().filter_map(|x| x));
+    let rx_chan = Vec::from_iter(rx_chan.into_iter().filter_map(|x| x));
     assert!(sd_chan.len() == n && rx_chan.len() == n);
+    let sd_prod = Vec::from_iter(sd_prod.into_iter());
+    let rx_cons = Vec::from_iter(rx_cons.into_iter());
     (sd_chan, rx_chan, sd_prod, rx_cons)
 }
 
@@ -180,8 +193,8 @@ fn xpu_linear_test() {
             GemmConstants::new(
                 LINK_CAPACITY,
                 BUFFER_CAPACITY,
-                0,
-                *tuuids.get(0).unwrap(),
+                node_id as u32,
+                tuuids[node_id],
                 NUM_MATMULS,
             ),
             in_conns.remove(0),
@@ -197,8 +210,10 @@ fn xpu_linear_test() {
             xmat.map_axis(Axis(1), |x| x_mat_vec.push(x.to_owned()));
             x_mat_vec
         };
+        dbg!(node_id);
         match in_prods.remove(0) {
             [Some(x_send), None] => {
+                dbg!("1 prods - in");
                 let x_mat_vec = build_input(node_id);
                 ctx.add_child(Producer::new(
                     || x_mat_vec.into_iter(),
@@ -207,13 +222,17 @@ fn xpu_linear_test() {
                     pdelay,
                 ));
             }
-            [None, Some(x_send)] => ctx.add_child(Producer::new(
-                || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
-                x_send,
-                node_id,
-                pdelay,
-            )),
+            [None, Some(x_send)] => {
+                dbg!("1 prod - zero");
+                ctx.add_child(Producer::new(
+                    || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
+                    x_send,
+                    node_id,
+                    pdelay,
+                ))
+            }
             [Some(r_send), Some(d_send)] => {
+                dbg!("2 prods");
                 let x_mat_vec = build_input(node_id);
                 ctx.add_child(Producer::new(
                     || x_mat_vec.into_iter(),
@@ -233,13 +252,16 @@ fn xpu_linear_test() {
         match out_cons.remove(0) {
             [Some(out_recv), None] => {
                 // Skip Consumer
+                dbg!("1 cons - zero");
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv, node_id))
             }
             [None, Some(out_recv)] => {
                 // Verify Consumer
+                dbg!("1 cons - verify");
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv, node_id))
             }
             [Some(l_recv), Some(u_recv)] => {
+                dbg!("2 cons");
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, l_recv, node_id));
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, u_recv, node_id));
             }
