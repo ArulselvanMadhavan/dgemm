@@ -61,6 +61,7 @@ pub fn mk_time_slice(
             tevt.set_name(tname.to_string());
         } else {
             tevt.set_type(track_event::Type::TYPE_SLICE_END);
+            tevt.set_name(tname.to_string());
         }
         tevt.set_track_uuid(thread_uuid);
         tpkts[idx].set_track_event(tevt);

@@ -21,7 +21,13 @@
 - [ ] feed into raylib
 - [ ] Rename gemm to meshgemm
 - [ ] Check max circle with 4 lines you can draw.
-- [ ] Read protobuf files
-- [ ] Write protobuf files into a directory
-- [ ] Combine them
-- [ ] Build timeline matrix
+- [X] Read protobuf files
+- [X] Write protobuf files into a directory
+- [X] Combine them
+- [X] Build timeline matrix
+- [ ] Draw squares
+- [ ] Add states
+- [ ] For every timestep, check if states need to be updated.
+- [ ] Update the state once every few seconds
+- [ ] Add current time in cycles
+- [ ] Add verified

@@ -9,6 +9,8 @@ itertools = "^0.14.0"
 ndarray = "0.15.6"
 protobuf = "^3.7.2"
 raylib = "^5.5.0"
+strum = "0.27.1"
+strum_macros = "0.27.1"
 uuid = "^1.16.0"
 
 [build-dependencies]

@@ -4,12 +4,11 @@ use dam::{
     utility_contexts::{ApproxCheckerContext, CheckerContext, ConsumerContext},
 };
 use dgemm::{
-    consumer::Consumer,
-    gemm::{Gemm, GemmConstants},
+    gemm::{Gemm, GemmConstants, Tracks},
     producer::Producer,
 };
-use itertools::Itertools;
 use ndarray::*;
+use strum::EnumCount;
 
 /// Assign Sender,Receiver channel pair based on Conn matrix
 /// Each row in Conn matrix sums upto a max value of 1
@@ -52,10 +51,6 @@ fn assign_chan<'a, T: Clone + 'a>(
         count = 0;
         for r in 0..n {
             if conn[(r, s)] {
-                // let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
-                // dbg!("R", r, s);
-                // rx_chan[s] = Some(rx);
-                // sd_chan[r] = Some(tx);
                 count += 1;
             }
         }
@@ -158,7 +153,7 @@ fn xpu_linear_test() {
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
     const O_SIZE: usize = NUM_INPUTS * OUT_FEATURES;
     const O_RECV_STEPS: usize = O_SIZE / LINK_CAPACITY;
-    const TRACKS_PER_THREAD: usize = 5;
+    const TRACKS_PER_THREAD: usize = Tracks::COUNT;
     const DIMS: [usize; 2] = [3, 4];
 
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);

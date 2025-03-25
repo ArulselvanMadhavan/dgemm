@@ -7,6 +7,14 @@ use crate::trace::{
     perfetto::{Trace, TracePacket},
 };
 
+#[derive(strum_macros::EnumCount, strum_macros::Display, strum_macros::EnumString)]
+pub enum Tracks {
+    RdLeft = 0,
+    RdUp = 1,
+    WrDown = 2,
+    WrRight = 3,
+    Gemm = 4,
+}
 /// Constants for GEMM
 /// link_capacity - Number of elements acceptable in a send/recv
 /// buffer_size - Number of receive msgs acceptable before starting a GEMM
@@ -143,17 +151,14 @@ where
                         let row = Array::from_iter(data.data.clone().into_iter());
                         ibuf1.row_mut(rd_counter1).assign(&row);
                         rd_counter1 += 1;
-                        tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 0, 1));
+                        let evt = Tracks::RdLeft;
+                        tpkts.extend_from_slice(&self.evt_slice(
+                            evt.to_string().as_str(),
+                            evt as usize,
+                            1,
+                        ));
                     }
-                    Err(_) => {
-                        // let dbg_str = format!(
-                        //     "T={time}|GEMM={tid}|Nothing to read from left",
-                        //     time = self.time.tick().time(),
-                        //     tid = self.constants.thread_id
-                        // );
-                        // dbg!(dbg_str);
-                        ()
-                    }
+                    Err(_) => (),
                 }
             }
             if is_rd_ctrl2 {
@@ -162,31 +167,30 @@ where
                         let row = Array::from_iter(data.data.clone().into_iter());
                         cbuf.row_mut(rd_counter2).assign(&row);
                         rd_counter2 += 1;
-                        tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 1, 1));
+                        let evt = Tracks::RdUp;
+                        tpkts.extend_from_slice(&self.evt_slice(
+                            evt.to_string().as_str(),
+                            evt as usize,
+                            1,
+                        ));
                     }
-                    Err(_) => {
-                        // let dbg_str = format!(
-                        //     "T={time}|GEMM={tid}|Nothing to read from up",
-                        //     time = self.time.tick().time(),
-                        //     tid = self.constants.thread_id
-                        // );
-                        // dbg!(dbg_str);
-                        ()
-                    }
+                    Err(_) => (),
                 }
             }
             if is_wr_ctrl1 {
                 let row = obuf.row(osize - wr_counter1).to_owned();
                 let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
                 self.output[1].enqueue(&self.time, ce).unwrap();
-                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 2, 1));
+                let evt = Tracks::WrDown;
+                tpkts.extend_from_slice(&self.evt_slice(evt.to_string().as_str(), evt as usize, 1));
                 wr_counter1 -= 1;
             }
             if is_wr_ctrl2 {
                 let row = ibuf2.row(isize - wr_counter2).to_owned();
                 let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
                 self.output[0].enqueue(&self.time, ce).unwrap();
-                tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 3, 1));
+                let evt = Tracks::WrRight;
+                tpkts.extend_from_slice(&self.evt_slice(evt.to_string().as_str(), evt as usize, 1));
                 wr_counter2 -= 1;
             }
             if is_mm_ctrl {
@@ -202,7 +206,12 @@ where
                 rd_counter1 = 0;
                 rd_counter2 = 0;
                 let mm_cycles = (isize + osize - 1) as u64;
-                tpkts.extend_from_slice(&self.evt_slice("GEMM", 4, mm_cycles + 1));
+                let evt = Tracks::Gemm;
+                tpkts.extend_from_slice(&self.evt_slice(
+                    evt.to_string().as_str(),
+                    evt as usize,
+                    mm_cycles + 1,
+                ));
                 self.time.incr_cycles(mm_cycles);
                 num_matmuls += 1;
             }
