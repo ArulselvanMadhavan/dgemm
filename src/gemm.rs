@@ -116,7 +116,8 @@ where
         let ifactor = link_cap / in_features;
         let ofactor = link_cap / out_features;
         let isize = self.constants.buffer_size;
-        let mut ibuf = Array::<E, _>::zeros([isize, link_cap]);
+        let mut ibuf1 = Array::<E, _>::zeros([isize, link_cap]);
+        let mut ibuf2 = Array::<E, _>::zeros([isize, link_cap]);
         assert!((isize * ifactor) % ofactor == 0);
         let osize = (isize * ifactor) / ofactor;
         let mut obuf = Array::<E, _>::zeros([osize, link_cap]);
@@ -144,7 +145,7 @@ where
                 match self.input[0].dequeue(&self.time) {
                     Ok(data) => {
                         let row = Array::from_iter(data.data.clone().into_iter());
-                        ibuf.row_mut(rd_counter1).assign(&row);
+                        ibuf1.row_mut(rd_counter1).assign(&row);
                         rd_counter1 += 1;
                         tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 0, 1));
                     }
@@ -186,20 +187,21 @@ where
                 wr_counter1 -= 1;
             }
             if is_wr_ctrl2 {
-                let row = ibuf.row(isize - wr_counter2).to_owned();
+                let row = ibuf2.row(isize - wr_counter2).to_owned();
                 let ce = ChannelElement::new(self.time.tick() + 1, row).convert::<T>();
                 self.output[0].enqueue(&self.time, ce).unwrap();
                 tpkts.extend_from_slice(&self.evt_slice("WR_BUF_OUT", 3, 1));
                 wr_counter2 -= 1;
             }
             if is_mm_ctrl {
-                let x = ibuf.to_shape((isize * ifactor, in_features)).unwrap();
+                let x = ibuf1.to_shape((isize * ifactor, in_features)).unwrap();
                 let out = x.dot(&self.weights);
                 // println!("{:?}|{:?}", self.constants.thread_id, x);
                 // println!("{:?}|{:?}", self.constants.thread_id, self.weights);
                 obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
                 wr_counter1 = osize;
                 wr_counter2 = isize;
+                ibuf2 = ibuf1.clone();
                 rd_counter1 = 0;
                 rd_counter2 = 0;
                 let mm_cycles = (isize + osize - 1) as u64;
@@ -219,6 +221,9 @@ where
                 && wr_counter2 == 0;
             self.time.incr_cycles(self.initiation_interval);
             if num_matmuls == self.constants.num_matmuls && wr_counter1 == 0 && wr_counter2 == 0 {
+                break;
+            }
+            if self.time.tick().time() > 40 {
                 break;
             }
         }

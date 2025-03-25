@@ -1,6 +1,7 @@
 use dam::{
     channel::{Receiver, Sender},
     simulation::{InitializationOptionsBuilder, ProgramBuilder, RunOptions},
+    utility_contexts::{ApproxCheckerContext, CheckerContext},
 };
 use dgemm::{
     consumer::Consumer,
@@ -155,6 +156,8 @@ fn xpu_linear_test() {
     const W_SIZE: usize = IN_FEATURES * OUT_FEATURES;
     const X_SIZE: usize = NUM_INPUTS * IN_FEATURES;
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
+    const O_SIZE: usize = NUM_INPUTS * OUT_FEATURES;
+    const O_RECV_STEPS: usize = O_SIZE / LINK_CAPACITY;
     const TRACKS_PER_THREAD: usize = 5;
     const DIMS: [usize; 2] = [1, 2];
 
@@ -183,7 +186,17 @@ fn xpu_linear_test() {
         .into_shape([NUM_INPUTS, DIMS[0], IN_FEATURES])
         .unwrap();
     let biases = ndarray::Array::<f64, _>::linspace(0.0, OUT_FEATURES as f64, OUT_FEATURES);
-
+    let w_ref = weight_mat
+        .to_shape([DIMS[0] * IN_FEATURES, DIMS[1] * OUT_FEATURES])
+        .unwrap();
+    // NUM_INPUTS x DIMS[1] * OUT_FEATURES
+    let ref_out = x_mat
+        .to_shape((NUM_INPUTS, DIMS[0] * IN_FEATURES))
+        .unwrap()
+        .dot(&w_ref);
+    let ref_out = ref_out
+        .to_shape((NUM_INPUTS, DIMS[1], OUT_FEATURES))
+        .unwrap();
     // Build contexts
     (0..num_nodes).for_each(|node_id| {
         let row_id = node_id / DIMS[1];
@@ -212,6 +225,15 @@ fn xpu_linear_test() {
             let mut x_mat_vec = Vec::with_capacity(X_SEND_STEPS);
             xmat.map_axis(Axis(1), |x| x_mat_vec.push(x.to_owned()));
             x_mat_vec
+        };
+        let build_output = |node_id: usize| {
+            let x_dim_id = node_id / DIMS[1];
+            let y_dim_id = node_id - (x_dim_id * DIMS[1]);
+            let omat = ref_out.select(Axis(1), &[y_dim_id]).remove_axis(Axis(1));
+            let omat = omat.to_shape((O_RECV_STEPS, LINK_CAPACITY)).unwrap();
+            let mut o_mat_vec = Vec::with_capacity(O_RECV_STEPS);
+            omat.map_axis(Axis(1), |x| o_mat_vec.push(x.to_owned()));
+            o_mat_vec
         };
         dbg!(node_id);
         match in_prods.remove(0) {
@@ -261,25 +283,31 @@ fn xpu_linear_test() {
             [None, Some(out_recv)] => {
                 // Verify Consumer
                 dbg!("1 cons - verify");
-                ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv, node_id))
+                let out = build_output(node_id);
+                ctx.add_child(ApproxCheckerContext::new(
+                    || out.into_iter(),
+                    out_recv,
+                    |a, b| a == b,
+                ));
             }
             [Some(l_recv), Some(u_recv)] => {
                 dbg!("2 cons");
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, l_recv, node_id));
+                let out = build_output(node_id);
+                // ctx.add_child(ApproxCheckerContext::new(
+                //     || out.into_iter(),
+                //     u_recv,
+                //     |a, b| a == b,
+                // ));
+                dbg!(out);
                 ctx.add_child(Consumer::new(OUT_FEATURES as u64, u_recv, node_id));
             }
             _ => (),
         }
     });
-    let w_ref = weight_mat
-        .to_shape([DIMS[0] * IN_FEATURES, DIMS[1] * OUT_FEATURES])
-        .unwrap();
-    let ref_out = x_mat
-        .to_shape((NUM_INPUTS, DIMS[0] * IN_FEATURES))
-        .unwrap()
-        .dot(&w_ref);
+
     println!("NUM CS:{:?}", ctx.num_children());
-    println!("Ref out:{:?}@{:?}={:?}", x_mat, w_ref, ref_out);
+    // println!("Ref out:{:?}@{:?}={:?}", ref_out.shape());
     let executed = ctx
         .initialize(
             InitializationOptionsBuilder::default()
