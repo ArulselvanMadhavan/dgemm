@@ -29,6 +29,7 @@ fn assign_chan<'a, T: Clone + 'a>(
     let mut rx_chan = Array1::<Option<Receiver<Array1<T>>>>::default(n);
     let mut rx_cons = Array1::<Option<Receiver<Array1<T>>>>::default(n);
     let mut sd_prod = Array1::<Option<Sender<Array1<T>>>>::default(n);
+    // let mut total_conns = 0;
     for s in 0..n {
         let mut count = 0;
         for r in 0..n {
@@ -36,6 +37,7 @@ fn assign_chan<'a, T: Clone + 'a>(
                 let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
                 sd_chan[s] = Some(tx);
                 rx_chan[r] = Some(rx);
+                dbg!(s, r);
                 count += 1;
             }
         }
@@ -49,9 +51,10 @@ fn assign_chan<'a, T: Clone + 'a>(
         count = 0;
         for r in 0..n {
             if conn[(r, s)] {
-                let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
-                rx_chan[s] = Some(rx);
-                sd_chan[s] = Some(tx);
+                // let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
+                // dbg!("R", r, s);
+                // rx_chan[s] = Some(rx);
+                // sd_chan[r] = Some(tx);
                 count += 1;
             }
         }
@@ -113,12 +116,12 @@ fn mesh_conn<'a, T: Clone + 'a>(
     let mut in_chans = Vec::with_capacity(n);
     let mut in_prods = Vec::with_capacity(n);
     let mut out_cons = Vec::with_capacity(n);
-    dbg!(
-        "Node to Node Links:",
-        dims[0] * (dims[1] - 1) + dims[1] * (dims[0] - 1)
-    );
-    dbg!("Prod|Cons links", dims[0] * 2 + dims[1] * 2);
-    dbg!(rprod.len(), lcon.len(), dprod.len(), ucon.len());
+    // dbg!(
+    //     "Node to Node Links:",
+    //     dims[0] * (dims[1] - 1) + dims[1] * (dims[0] - 1)
+    // );
+    // dbg!("Prod|Cons links", dims[0] * 2 + dims[1] * 2);
+    // dbg!(rprod.len(), lcon.len(), dprod.len(), ucon.len());
     (0..n).for_each(|_| {
         out_chans.push([rchan.remove(0), dchan.remove(0)]);
         in_chans.push([lchan.remove(0), uchan.remove(0)]);
@@ -153,7 +156,7 @@ fn xpu_linear_test() {
     const X_SIZE: usize = NUM_INPUTS * IN_FEATURES;
     const X_SEND_STEPS: usize = X_SIZE / LINK_CAPACITY;
     const TRACKS_PER_THREAD: usize = 3;
-    const DIMS: [usize; 2] = [1, 1];
+    const DIMS: [usize; 2] = [1, 2];
 
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);
     // Trace descriptors
@@ -275,7 +278,8 @@ fn xpu_linear_test() {
         .to_shape((NUM_INPUTS, DIMS[0] * IN_FEATURES))
         .unwrap()
         .dot(&w_ref);
-    println!("Ref out:{:?}@{:?}={:?}", x_mat, w_ref, ref_out);
+    println!("NUM CS:{:?}", ctx.num_children());
+    //println!("Ref out:{:?}@{:?}={:?}", x_mat, w_ref, ref_out);
     let executed = ctx
         .initialize(
             InitializationOptionsBuilder::default()
