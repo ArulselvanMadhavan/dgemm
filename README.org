@@ -20,3 +20,8 @@
 - [X] Decide a dataflow
 - [ ] feed into raylib
 - [ ] Rename gemm to meshgemm
+- [ ] Check max circle with 4 lines you can draw.
+- [ ] Read protobuf files
+- [ ] Write protobuf files into a directory
+- [ ] Combine them
+- [ ] Build timeline matrix

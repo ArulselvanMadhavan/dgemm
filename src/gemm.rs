@@ -1,5 +1,3 @@
-use std::fs::File;
-
 use dam::context_tools::*;
 use ndarray::prelude::*;
 use protobuf::{CodedOutputStream, Message};
@@ -132,11 +130,9 @@ where
         let mut is_wr_ctrl2 = false;
         let mut is_mm_ctrl = false;
         let mut trace = Trace::new();
-        let mut file = File::create(format!(
-            "gemm{tid}.perfetto",
-            tid = self.constants.thread_id
-        ))
-        .unwrap();
+        let mut file = trace::mk_trace_file(
+            format!("gemm{tid}.perfetto", tid = self.constants.thread_id).as_str(),
+        );
         let mut cos = CodedOutputStream::new(&mut file);
         let mut num_matmuls = 0;
         loop {

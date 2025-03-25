@@ -29,10 +29,17 @@ fn mk_track_desc() -> (TracePacket, TrackDescriptor) {
 //     MessageField::some(tdesc)
 // }
 
+pub fn mk_trace_file(fname: &str) -> File {
+    const DIR: &str = "artifacts/trace";
+    std::fs::create_dir_all(DIR).unwrap();
+    let fname = format!("{DIR}/{fname}", DIR = DIR, fname = fname);
+    File::create(fname).unwrap()
+}
+
 pub fn write_trace(fname: &str, tpkts: Vec<TracePacket>) {
     let mut trace = Trace::new();
     trace.packet = tpkts;
-    let mut file = File::create(fname).unwrap();
+    let mut file = mk_trace_file(fname);
     let mut cos = CodedOutputStream::new(&mut file);
     trace.write_to(&mut cos).unwrap();
     cos.flush().unwrap();
