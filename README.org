@@ -10,12 +10,13 @@
 - [X] Producers with delay
 - [X] Inputs derived from N
 - [ ] Add bias support
-- [ ] Verify Context
+- [X] Verify Context
 - [X] Add second input.
 - [X] Add second output
-- [ ] Matmul verification
+- [X] Matmul verification
 - [X] Two senders; Two receivers
-- [ ] VerifyContext - Approx verify - Maybe?
-- [ ] Emit trace events
+- [X] VerifyContext - Approx verify - Maybe?
+- [X] Emit trace events
 - [X] Decide a dataflow
-- [ ] feed into raylib or perfetto
+- [ ] feed into raylib
+- [ ] Rename gemm to meshgemm

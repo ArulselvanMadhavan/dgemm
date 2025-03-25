@@ -150,12 +150,12 @@ where
                         tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 0, 1));
                     }
                     Err(_) => {
-                        let dbg_str = format!(
-                            "T={time}|GEMM={tid}|Nothing to read from left",
-                            time = self.time.tick().time(),
-                            tid = self.constants.thread_id
-                        );
-                        dbg!(dbg_str);
+                        // let dbg_str = format!(
+                        //     "T={time}|GEMM={tid}|Nothing to read from left",
+                        //     time = self.time.tick().time(),
+                        //     tid = self.constants.thread_id
+                        // );
+                        // dbg!(dbg_str);
                         ()
                     }
                 }
@@ -169,12 +169,12 @@ where
                         tpkts.extend_from_slice(&self.evt_slice("RD_BUF_IN", 1, 1));
                     }
                     Err(_) => {
-                        let dbg_str = format!(
-                            "T={time}|GEMM={tid}|Nothing to read from up",
-                            time = self.time.tick().time(),
-                            tid = self.constants.thread_id
-                        );
-                        dbg!(dbg_str);
+                        // let dbg_str = format!(
+                        //     "T={time}|GEMM={tid}|Nothing to read from up",
+                        //     time = self.time.tick().time(),
+                        //     tid = self.constants.thread_id
+                        // );
+                        // dbg!(dbg_str);
                         ()
                     }
                 }
@@ -195,7 +195,8 @@ where
             }
             if is_mm_ctrl {
                 let x = ibuf1.to_shape((isize * ifactor, in_features)).unwrap();
-                let out = x.dot(&self.weights);
+                let cout = cbuf.to_shape((isize * ifactor, out_features)).unwrap();
+                let out = x.dot(&self.weights) + cout;
                 // println!("{:?}|{:?}", self.constants.thread_id, x);
                 // println!("{:?}|{:?}", self.constants.thread_id, self.weights);
                 obuf = out.to_shape((osize, link_cap)).unwrap().to_owned();
@@ -221,9 +222,6 @@ where
                 && wr_counter2 == 0;
             self.time.incr_cycles(self.initiation_interval);
             if num_matmuls == self.constants.num_matmuls && wr_counter1 == 0 && wr_counter2 == 0 {
-                break;
-            }
-            if self.time.tick().time() > 40 {
                 break;
             }
         }

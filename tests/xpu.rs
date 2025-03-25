@@ -1,7 +1,7 @@
 use dam::{
     channel::{Receiver, Sender},
     simulation::{InitializationOptionsBuilder, ProgramBuilder, RunOptions},
-    utility_contexts::{ApproxCheckerContext, CheckerContext},
+    utility_contexts::{ApproxCheckerContext, CheckerContext, ConsumerContext},
 };
 use dgemm::{
     consumer::Consumer,
@@ -38,7 +38,7 @@ fn assign_chan<'a, T: Clone + 'a>(
                 let (tx, rx) = ctx.bounded::<Array1<T>>(buffer_size);
                 sd_chan[s] = Some(tx);
                 rx_chan[r] = Some(rx);
-                dbg!(s, r);
+                // dbg!(s, r);
                 count += 1;
             }
         }
@@ -159,7 +159,7 @@ fn xpu_linear_test() {
     const O_SIZE: usize = NUM_INPUTS * OUT_FEATURES;
     const O_RECV_STEPS: usize = O_SIZE / LINK_CAPACITY;
     const TRACKS_PER_THREAD: usize = 5;
-    const DIMS: [usize; 2] = [1, 2];
+    const DIMS: [usize; 2] = [3, 4];
 
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);
     // Trace descriptors
@@ -217,7 +217,7 @@ fn xpu_linear_test() {
             out_conns.remove(0),
             1,
         ));
-        let pdelay = 5;
+        let pdelay = 0;
         let build_input = |node_id: usize| {
             let x_dim_id = node_id / DIMS[1];
             let xmat = x_mat.select(Axis(1), &[x_dim_id]).remove_axis(Axis(1));
@@ -235,10 +235,8 @@ fn xpu_linear_test() {
             omat.map_axis(Axis(1), |x| o_mat_vec.push(x.to_owned()));
             o_mat_vec
         };
-        dbg!(node_id);
         match in_prods.remove(0) {
             [Some(x_send), None] => {
-                dbg!("1 prods - in");
                 let x_mat_vec = build_input(node_id);
                 ctx.add_child(Producer::new(
                     || x_mat_vec.into_iter(),
@@ -247,17 +245,13 @@ fn xpu_linear_test() {
                     pdelay,
                 ));
             }
-            [None, Some(x_send)] => {
-                dbg!("1 prod - zero");
-                ctx.add_child(Producer::new(
-                    || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
-                    x_send,
-                    node_id,
-                    pdelay,
-                ))
-            }
+            [None, Some(x_send)] => ctx.add_child(Producer::new(
+                || (0..X_SEND_STEPS).map(|_x| Array1::zeros(LINK_CAPACITY)),
+                x_send,
+                node_id,
+                pdelay,
+            )),
             [Some(r_send), Some(d_send)] => {
-                dbg!("2 prods");
                 let x_mat_vec = build_input(node_id);
                 ctx.add_child(Producer::new(
                     || x_mat_vec.into_iter(),
@@ -276,13 +270,10 @@ fn xpu_linear_test() {
         }
         match out_cons.remove(0) {
             [Some(out_recv), None] => {
-                // Skip Consumer
-                dbg!("1 cons - zero");
-                ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv, node_id))
+                ctx.add_child(ConsumerContext::new(out_recv));
+                // ctx.add_child(Consumer::new(OUT_FEATURES as u64, out_recv, node_id))
             }
             [None, Some(out_recv)] => {
-                // Verify Consumer
-                dbg!("1 cons - verify");
                 let out = build_output(node_id);
                 ctx.add_child(ApproxCheckerContext::new(
                     || out.into_iter(),
@@ -291,23 +282,22 @@ fn xpu_linear_test() {
                 ));
             }
             [Some(l_recv), Some(u_recv)] => {
-                dbg!("2 cons");
-                ctx.add_child(Consumer::new(OUT_FEATURES as u64, l_recv, node_id));
+                ctx.add_child(ConsumerContext::new(l_recv));
+                // ctx.add_child(Consumer::new(OUT_FEATURES as u64, l_recv, node_id));
                 let out = build_output(node_id);
-                // ctx.add_child(ApproxCheckerContext::new(
-                //     || out.into_iter(),
-                //     u_recv,
-                //     |a, b| a == b,
-                // ));
-                dbg!(out);
-                ctx.add_child(Consumer::new(OUT_FEATURES as u64, u_recv, node_id));
+                ctx.add_child(ApproxCheckerContext::new(
+                    || out.into_iter(),
+                    u_recv,
+                    |a, b| a == b,
+                ));
+                // dbg!(out);
+                // ctx.add_child(Consumer::new(OUT_FEATURES as u64, u_recv, node_id));
             }
             _ => (),
         }
     });
 
     println!("NUM CS:{:?}", ctx.num_children());
-    // println!("Ref out:{:?}@{:?}={:?}", ref_out.shape());
     let executed = ctx
         .initialize(
             InitializationOptionsBuilder::default()

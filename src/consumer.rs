@@ -28,13 +28,13 @@ where
         let mut count: u64 = 0;
         loop {
             match self.input.dequeue(&self.time) {
-                Ok(x) => {
-                    println!(
-                        "Consumer:{:?}|{:?}|{:?}",
-                        self.node_id,
-                        self.time.tick(),
-                        x.data
-                    );
+                Ok(_x) => {
+                    // println!(
+                    //     "Consumer:{:?}|{:?}|{:?}",
+                    //     self.node_id,
+                    //     self.time.tick(),
+                    //     x.data
+                    // );
                     count += 1;
                 }
                 Err(_) => return,
