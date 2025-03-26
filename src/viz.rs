@@ -14,22 +14,17 @@ use protobuf::*;
 use raylib::prelude::*;
 use strum::{EnumCount, VariantArray};
 
-const SCR_X_OFF: usize = 40;
-const SCR_Y_OFF: usize = 40;
-const CIR_X_OFF: usize = 40;
-const CIR_Y_OFF: usize = 40;
+const SCR_X_OFF: usize = 50;
+const SCR_Y_OFF: usize = 50;
+const CIR_X_OFF: usize = 60;
+const CIR_Y_OFF: usize = 60;
 const CIR_RADIUS: usize = 10;
-const LINE_LEN: usize = 10;
+const LINE_LEN: usize = 40;
 const WIN_X: usize = 1500;
 const WIN_Y: usize = 820;
 
 fn mk_coordinates(dims: [usize; 2]) -> Array3<[usize; 4]> {
     let [row, col] = dims;
-    // let mut circ_centers = Array2::from_elem(dims, [0, 0]);
-    // let mut top_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
-    // let mut bot_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
-    // let mut lft_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
-    // let mut rgt_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
     let mut coords = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], [0, 0, 0, 0]);
     for r in 0..row {
         for c in 0..col {
@@ -79,13 +74,9 @@ fn main() {
             (_, _) => Ord::cmp(&a, &b),
         }
     });
-    // files.sorted_by(cmp)
-    // let files = files.sorted();
     let vpkts = files.filter_map(|path| {
-        // let entry = entry.unwrap();
-        // let fname = entry.file_name().into_string().unwrap();
         if path.contains("gemm") {
-            println!("FileN:{:?}", path);
+            let is_first = path.contains("gemm_0");
             let mut file = fs::File::open(path).unwrap();
             let mut cis = CodedInputStream::new(&mut file);
             let mut trace = Trace::new();
@@ -97,8 +88,12 @@ fn main() {
                 let ts = tpkt.timestamp();
                 let slice_type = tevt.type_().value();
                 let evt = Tracks::from_str(tevt.name()).unwrap();
+                if is_first {
+                    dbg!(ts, slice_type, evt);
+                }
                 vpkts.push((ts, slice_type, evt));
             }
+            vpkts.sort_by(|(ts1, _, _), (ts2, _, _)| Ord::cmp(ts1, ts2));
             vpkts.reverse();
             Some(vpkts)
         } else {
@@ -114,38 +109,58 @@ fn main() {
     // }
     // println!("{:?}|{:?}", vpkts[0].len(), vpkts[1].len())
 
-    // let (mut rl, thread) = raylib::init()
-    //     .size(WIN_X as i32, WIN_Y as i32)
-    //     .title("DGEMM")
-    //     .build();
-    // let dims: [usize; 2] = [30, 8];
-    // let _state = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], Color::BLACK);
-    // while !rl.window_should_close() {
-    //     let _cur_time = rl.get_time() as usize;
-    //     let mut d = rl.begin_drawing(&thread);
-    //     d.clear_background(Color::WHITE);
-    //     let coords = mk_coordinates(dims);
-    //     (0..dims[0]).into_iter().for_each(|r| {
-    //         (0..dims[1]).into_iter().for_each(|c| {
-    //             Tracks::VARIANTS.into_iter().for_each(|t| {
-    //                 let t_idx = *t as usize;
-    //                 match t {
-    //                     Tracks::RdLeft | Tracks::RdUp | Tracks::WrDown | Tracks::WrRight => {
-    //                         let [sx, sy, ex, ey] = coords[[t_idx, r, c]];
-    //                         d.draw_line(sx as i32, sy as i32, ex as i32, ey as i32, Color::BLACK);
-    //                     }
-    //                     Tracks::Gemm => {
-    //                         let [cx, cy, _, _] = coords[[t_idx, r, c]];
-    //                         d.draw_circle_lines(
-    //                             cx as i32,
-    //                             cy as i32,
-    //                             CIR_RADIUS as f32,
-    //                             Color::BLACK,
-    //                         );
-    //                     }
-    //                 }
-    //             })
-    //         })
-    //     });
-    // }
+    let (mut rl, thread) = raylib::init()
+        .size(WIN_X as i32, WIN_Y as i32)
+        .title("DGEMM")
+        .build();
+    let dims: [usize; 2] = [3, 4];
+    let mut state = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], Color::BLACK);
+    while !rl.window_should_close() {
+        let cur_time = rl.get_time() as u64;
+        let mut d = rl.begin_drawing(&thread);
+        d.clear_background(Color::WHITE);
+        let coords = mk_coordinates(dims);
+        (0..dims[0]).into_iter().for_each(|r| {
+            (0..dims[1]).into_iter().for_each(|c| {
+                let n = r * dims[1] + c;
+                let vp = &vpkts[n];
+                if vp.len() > 0 {
+                    let (ts, stype, trk) = vp[vp.len() - 1];
+                    if cur_time >= ts {
+                        //update state
+                        if stype == 1 {
+                            match trk {
+                                Tracks::Gemm => state[[trk as usize, r, c]] = Color::GREEN,
+                                _ => state[[trk as usize, r, c]] = Color::ORANGERED,
+                            }
+                        } else {
+                            state[[trk as usize, r, c]] = Color::BLACK;
+                        }
+                        //pop
+                        vpkts[n].pop();
+                    }
+                }
+                Tracks::VARIANTS.into_iter().for_each(|t| {
+                    let t_idx = *t as usize;
+                    let t_state = state[[t_idx, r, c]];
+                    match t {
+                        Tracks::RdLeft | Tracks::RdUp | Tracks::WrDown | Tracks::WrRight => {
+                            let [sx, sy, ex, ey] = coords[[t_idx, r, c]];
+                            d.draw_line_ex(
+                                Vector2::new(sy as f32, sx as f32),
+                                Vector2::new(ey as f32, ex as f32),
+                                4.0,
+                                t_state,
+                            );
+                            d.draw_line(sy as i32, sx as i32, ey as i32, ex as i32, t_state);
+                        }
+                        Tracks::Gemm => {
+                            let [cx, cy, _, _] = coords[[t_idx, r, c]];
+                            d.draw_circle(cy as i32, cx as i32, CIR_RADIUS as f32, t_state);
+                        }
+                    }
+                })
+            })
+        });
+    }
 }

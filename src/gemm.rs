@@ -14,6 +14,7 @@ use crate::trace::{
     strum_macros::VariantArray,
     Copy,
     Clone,
+    Debug,
 )]
 pub enum Tracks {
     RdLeft = 0,
