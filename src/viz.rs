@@ -24,7 +24,7 @@ const WIN_X: usize = 1500;
 const WIN_Y: usize = 820;
 const LINE_THICK: f32 = 4.0;
 const FONT_THICK: i32 = 20;
-const SECS_PER_CYCLE: usize = 2;
+const SECS_PER_CYCLE: usize = 1;
 
 fn mk_coordinates(dims: [usize; 2]) -> Array3<[usize; 4]> {
     let [row, col] = dims;
@@ -109,7 +109,7 @@ fn main() {
         .size(WIN_X as i32, WIN_Y as i32)
         .title("DGEMM")
         .build();
-    let dims: [usize; 2] = [3, 4];
+    let dims: [usize; 2] = [10, 10];
     let mut state = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], Color::BLACK);
     while !rl.window_should_close() {
         let cur_time = (rl.get_time() as u64) / (SECS_PER_CYCLE as u64);
@@ -117,7 +117,7 @@ fn main() {
         d.clear_background(Color::WHITE);
         d.draw_text(
             format!("CLK:{cur_time}", cur_time = cur_time).as_str(),
-            (WIN_X - SCR_X_OFF) as i32,
+            (WIN_X - SCR_X_OFF - 2 * CIR_RADIUS) as i32,
             (SCR_Y_OFF / 2) as i32,
             FONT_THICK,
             Color::BLACK,

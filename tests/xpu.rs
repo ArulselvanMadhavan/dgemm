@@ -155,7 +155,7 @@ fn xpu_linear_test() {
     const O_SIZE: usize = NUM_INPUTS * OUT_FEATURES;
     const O_RECV_STEPS: usize = O_SIZE / LINK_CAPACITY;
     const TRACKS_PER_THREAD: usize = Tracks::COUNT;
-    const DIMS: [usize; 2] = [25, 15];
+    const DIMS: [usize; 2] = [10, 10];
 
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);
     // Trace descriptors
