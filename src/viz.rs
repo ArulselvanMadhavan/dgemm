@@ -22,6 +22,9 @@ const CIR_RADIUS: usize = 10;
 const LINE_LEN: usize = 40;
 const WIN_X: usize = 1500;
 const WIN_Y: usize = 820;
+const LINE_THICK: f32 = 4.0;
+const FONT_THICK: i32 = 20;
+const SECS_PER_CYCLE: usize = 2;
 
 fn mk_coordinates(dims: [usize; 2]) -> Array3<[usize; 4]> {
     let [row, col] = dims;
@@ -102,13 +105,6 @@ fn main() {
     });
     let mut vpkts = vpkts.collect::<Array1<Vec<(u64, i32, Tracks)>>>();
 
-    // let mut vp = &vpkts[0];
-    // let (ts, st, _) = vpkts[0][vp.len() - 1];
-    // if ts > 0 {
-    //     vpkts[0].pop();
-    // }
-    // println!("{:?}|{:?}", vpkts[0].len(), vpkts[1].len())
-
     let (mut rl, thread) = raylib::init()
         .size(WIN_X as i32, WIN_Y as i32)
         .title("DGEMM")
@@ -116,9 +112,16 @@ fn main() {
     let dims: [usize; 2] = [3, 4];
     let mut state = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], Color::BLACK);
     while !rl.window_should_close() {
-        let cur_time = rl.get_time() as u64;
+        let cur_time = (rl.get_time() as u64) / (SECS_PER_CYCLE as u64);
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::WHITE);
+        d.draw_text(
+            format!("CLK:{cur_time}", cur_time = cur_time).as_str(),
+            (WIN_X - SCR_X_OFF) as i32,
+            (SCR_Y_OFF / 2) as i32,
+            FONT_THICK,
+            Color::BLACK,
+        );
         let coords = mk_coordinates(dims);
         (0..dims[0]).into_iter().for_each(|r| {
             (0..dims[1]).into_iter().for_each(|c| {
@@ -149,7 +152,7 @@ fn main() {
                             d.draw_line_ex(
                                 Vector2::new(sy as f32, sx as f32),
                                 Vector2::new(ey as f32, ex as f32),
-                                4.0,
+                                LINE_THICK,
                                 t_state,
                             );
                             d.draw_line(sy as i32, sx as i32, ey as i32, ex as i32, t_state);
