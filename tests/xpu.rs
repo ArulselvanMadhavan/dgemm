@@ -6,6 +6,7 @@ use dam::{
 use dgemm::{
     gemm::{Gemm, GemmConstants, Tracks},
     producer::Producer,
+    trace::clean_trace,
 };
 use ndarray::*;
 use strum::EnumCount;
@@ -158,6 +159,7 @@ fn xpu_linear_test() {
 
     let num_nodes: usize = DIMS.iter().fold(1, |prod, x| prod * x);
     // Trace descriptors
+    clean_trace();
     let thread_names = (0..num_nodes).map(|n| format!("xpu{n}", n = n));
     let thread_names = Vec::from_iter(thread_names);
     let thread_count = thread_names.len();

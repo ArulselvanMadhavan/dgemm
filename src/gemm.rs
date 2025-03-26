@@ -146,7 +146,7 @@ where
         let mut is_mm_ctrl = false;
         let mut trace = Trace::new();
         let mut file = trace::mk_trace_file(
-            format!("gemm{tid}.perfetto", tid = self.constants.thread_id).as_str(),
+            format!("gemm_{tid}_.perfetto", tid = self.constants.thread_id).as_str(),
         );
         let mut cos = CodedOutputStream::new(&mut file);
         let mut num_matmuls = 0;

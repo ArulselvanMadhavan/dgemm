@@ -25,8 +25,8 @@
 - [X] Write protobuf files into a directory
 - [X] Combine them
 - [X] Build timeline matrix
-- [ ] Draw squares
-- [ ] Add states
+- [X] Draw squares
+- [X] Add states
 - [ ] For every timestep, check if states need to be updated.
 - [ ] Update the state once every few seconds
 - [ ] Add current time in cycles

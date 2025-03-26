@@ -28,10 +28,12 @@ fn mk_track_desc() -> (TracePacket, TrackDescriptor) {
 //     tdesc.set_thread_name(tname);
 //     MessageField::some(tdesc)
 // }
-
-pub fn mk_trace_file(fname: &str) -> File {
-    const DIR: &str = "artifacts/trace";
+const DIR: &str = "artifacts/trace";
+pub fn clean_trace() {
+    std::fs::remove_dir_all(DIR).unwrap();
     std::fs::create_dir_all(DIR).unwrap();
+}
+pub fn mk_trace_file(fname: &str) -> File {
     let fname = format!("{DIR}/{fname}", DIR = DIR, fname = fname);
     File::create(fname).unwrap()
 }
@@ -136,6 +138,6 @@ pub fn get_trace_descriptors<const N: usize>(
         }
         // pid += 1;
     }
-    write_trace("header.perfetto", tpkts);
+    write_trace("header_0_.perfetto", tpkts);
     tuuids
 }
