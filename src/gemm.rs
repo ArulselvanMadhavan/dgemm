@@ -7,7 +7,14 @@ use crate::trace::{
     perfetto::{Trace, TracePacket},
 };
 
-#[derive(strum_macros::EnumCount, strum_macros::Display, strum_macros::EnumString)]
+#[derive(
+    strum_macros::EnumCount,
+    strum_macros::Display,
+    strum_macros::EnumString,
+    strum_macros::VariantArray,
+    Copy,
+    Clone,
+)]
 pub enum Tracks {
     RdLeft = 0,
     RdUp = 1,

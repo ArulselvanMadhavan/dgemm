@@ -11,7 +11,7 @@ use dgemm::{
 use ndarray::prelude::*;
 use protobuf::*;
 use raylib::prelude::*;
-use strum::EnumCount;
+use strum::{EnumCount, VariantArray};
 
 const SCR_X_OFF: usize = 40;
 const SCR_Y_OFF: usize = 40;
@@ -22,32 +22,44 @@ const LINE_LEN: usize = 10;
 const WIN_X: usize = 1500;
 const WIN_Y: usize = 820;
 
-fn mk_coordinates(
-    dims: [usize; 2],
-) -> (
-    Array2<[usize; 2]>,
-    Array2<[usize; 4]>,
-    Array2<[usize; 4]>,
-    Array2<[usize; 4]>,
-    Array2<[usize; 4]>,
-) {
+fn mk_coordinates(dims: [usize; 2]) -> Array3<[usize; 4]> {
     let [row, col] = dims;
-    let mut circ_centers = Array2::from_elem(dims, [0, 0]);
-    let mut top_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
-    let mut bot_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
-    let mut lft_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
-    let mut rgt_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
+    // let mut circ_centers = Array2::from_elem(dims, [0, 0]);
+    // let mut top_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
+    // let mut bot_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
+    // let mut lft_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
+    // let mut rgt_lines = Array2::from_elem(dims, [0, 0, 0, 0]);
+    let mut coords = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], [0, 0, 0, 0]);
     for r in 0..row {
         for c in 0..col {
             let (cx, cy) = (SCR_X_OFF + CIR_X_OFF * r, SCR_Y_OFF + CIR_Y_OFF * c);
-            circ_centers[[r, c]] = [cx, cy];
-            top_lines[[r, c]] = [cx, cy - CIR_RADIUS, cx, cy - CIR_RADIUS - LINE_LEN];
-            bot_lines[[r, c]] = [cx, cy + CIR_RADIUS, cx, cy + CIR_RADIUS + LINE_LEN];
-            lft_lines[[r, c]] = [cx - CIR_RADIUS, cy, cx - CIR_RADIUS - LINE_LEN, cy];
-            rgt_lines[[r, c]] = [cx + CIR_RADIUS, cy, cx + CIR_RADIUS + LINE_LEN, cy];
+            for t in Tracks::VARIANTS {
+                let t_idx = *t as usize;
+                match t {
+                    Tracks::RdLeft => {
+                        coords[[t_idx, r, c]] =
+                            [cx - CIR_RADIUS, cy, cx - CIR_RADIUS - LINE_LEN, cy]
+                    }
+                    Tracks::RdUp => {
+                        coords[[t_idx, r, c]] =
+                            [cx, cy - CIR_RADIUS, cx, cy - CIR_RADIUS - LINE_LEN]
+                    }
+                    Tracks::WrDown => {
+                        coords[[t_idx, r, c]] =
+                            [cx, cy + CIR_RADIUS, cx, cy + CIR_RADIUS + LINE_LEN]
+                    }
+                    Tracks::WrRight => {
+                        coords[[t_idx, r, c]] =
+                            [cx + CIR_RADIUS, cy, cx + CIR_RADIUS + LINE_LEN, cy]
+                    }
+                    Tracks::Gemm => {
+                        coords[[t_idx, r, c]] = [cx, cy, 0, 0];
+                    }
+                }
+            }
         }
     }
-    (circ_centers, top_lines, bot_lines, lft_lines, rgt_lines)
+    coords
 }
 fn main() {
     // let files = fs::read_dir("artifacts/trace/").unwrap();
@@ -87,28 +99,33 @@ fn main() {
         .size(WIN_X as i32, WIN_Y as i32)
         .title("DGEMM")
         .build();
-
+    let dims: [usize; 2] = [30, 8];
+    let _state = Array3::from_elem([Tracks::COUNT, dims[0], dims[1]], Color::BLACK);
     while !rl.window_should_close() {
-        // if rl.is_window_fullscreen() {
-        //     rl.toggle_fullscreen();
-        // }
+        let _cur_time = rl.get_time() as usize;
         let mut d = rl.begin_drawing(&thread);
-
         d.clear_background(Color::WHITE);
-        let dims = [30, 8];
-        let (circ_centers, top_lines, bot_lines, lft_lines, rgt_lines) = mk_coordinates(dims);
+        let coords = mk_coordinates(dims);
         (0..dims[0]).into_iter().for_each(|r| {
             (0..dims[1]).into_iter().for_each(|c| {
-                let [cx, cy] = circ_centers[[r, c]];
-                d.draw_circle_lines(cx as i32, cy as i32, CIR_RADIUS as f32, Color::BLACK);
-                let [sx, sy, ex, ey] = top_lines[[r, c]];
-                d.draw_line(sx as i32, sy as i32, ex as i32, ey as i32, Color::BLACK);
-                let [sx, sy, ex, ey] = bot_lines[[r, c]];
-                d.draw_line(sx as i32, sy as i32, ex as i32, ey as i32, Color::BLACK);
-                let [sx, sy, ex, ey] = lft_lines[[r, c]];
-                d.draw_line(sx as i32, sy as i32, ex as i32, ey as i32, Color::BLACK);
-                let [sx, sy, ex, ey] = rgt_lines[[r, c]];
-                d.draw_line(sx as i32, sy as i32, ex as i32, ey as i32, Color::BLACK);
+                Tracks::VARIANTS.into_iter().for_each(|t| {
+                    let t_idx = *t as usize;
+                    match t {
+                        Tracks::RdLeft | Tracks::RdUp | Tracks::WrDown | Tracks::WrRight => {
+                            let [sx, sy, ex, ey] = coords[[t_idx, r, c]];
+                            d.draw_line(sx as i32, sy as i32, ex as i32, ey as i32, Color::BLACK);
+                        }
+                        Tracks::Gemm => {
+                            let [cx, cy, _, _] = coords[[t_idx, r, c]];
+                            d.draw_circle_lines(
+                                cx as i32,
+                                cy as i32,
+                                CIR_RADIUS as f32,
+                                Color::BLACK,
+                            );
+                        }
+                    }
+                })
             })
         });
     }
