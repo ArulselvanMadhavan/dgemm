@@ -213,14 +213,17 @@ where
                 ibuf2 = ibuf1.clone();
                 rd_counter1 = 0;
                 rd_counter2 = 0;
-                let mm_cycles = (isize + osize - 1) as u64;
+                let flops = isize * ifactor * in_features * out_features;
+                let hw_flops: usize = in_features * out_features;
+                assert!(flops % hw_flops == 0);
+                let mm_cycles = (flops / hw_flops) as u64;
                 let evt = Tracks::Gemm;
                 tpkts.extend_from_slice(&self.evt_slice(
                     evt.to_string().as_str(),
                     evt as usize,
-                    mm_cycles + 1,
+                    mm_cycles,
                 ));
-                self.time.incr_cycles(mm_cycles);
+                self.time.incr_cycles(mm_cycles - 1);
                 num_matmuls += 1;
             }
             trace.packet = tpkts;
